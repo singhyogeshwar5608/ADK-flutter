@@ -1,0 +1,85 @@
+Create a Flutter screen for a Media Listing page with the following UI and behavior:
+
+1. App Bar:
+
+* Title: "Media"
+* Subtitle below title: "7 Items found"
+* Left: Back arrow icon
+* Right: Filter icon button
+
+2. Search Bar:
+
+* Positioned below AppBar
+* Placeholder: "Search by name"
+* Rounded border with light grey background
+* Include search icon inside the field
+
+3. Media List:
+
+* Display a vertical scrollable list of media cards
+* Each card contains:
+
+  * Full-width thumbnail (image/video)
+  * Rounded corners (12–16 radius)
+  * Overlay play button (centered) for video items
+  * Title below thumbnail (e.g., "RCM Abhiyan Prachar Hindi")
+* Add spacing between cards (12–16px)
+
+4. Media Card Behavior:
+
+* Card should be clickable
+* On tap → open media preview screen
+* For video → show play icon overlay
+* Use cached/network image loading
+
+5. Filter Bottom Sheet:
+
+* Opens when filter icon is clicked
+* Use modal bottom sheet with rounded top corners
+
+6. Filter Layout:
+
+* Header:
+
+  * Title: "Filters"
+  * Close (X) icon on right
+
+* Body:
+
+  * Left side: vertical tab (e.g., "Categories")
+  * Right side: list of checkbox options:
+
+    * Agriculture
+    * CSR
+    * Footwear
+    * Home Delivery
+    * KeySoul
+    * Product Insider
+
+7. Bottom Actions:
+
+* Left: "Reset" button (text button with icon)
+* Right: "Apply" button (primary blue rounded button)
+
+8. UI/UX:
+
+* Clean white/light theme
+* Proper padding (16px)
+* Smooth scrolling
+* Responsive layout
+* Soft shadows for cards
+
+9. State Management:
+
+* Maintain selected filters
+* Apply filters to media list
+* Reset clears all selections
+
+10. Optional Enhancements:
+
+* Add shimmer loading for media
+* Add debounce on search input
+* Animate bottom sheet opening
+
+Goal:
+Build a clean, modern media browsing screen with search, filter, and media preview functionality similar to the provided design. this screen should navigate when click at the media lint at menu screen, divide the whole process in very small parts and then perform step by step operations
