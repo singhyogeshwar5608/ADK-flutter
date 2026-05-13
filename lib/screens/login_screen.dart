@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../routes/app_routes.dart';
+import '../services/address_storage_service.dart';
 import '../services/api_client.dart';
 import '../state/profile_state.dart';
 import 'home_screen.dart';
@@ -82,6 +83,12 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
       ProfileProvider.of(context, listen: false)
           .updateFromMemberPayload(member);
+
+      final pid =
+          ProfileProvider.of(context, listen: false).data.partnerId.trim();
+      if (pid.isNotEmpty) {
+        await AddressStorageService.instance.migrateGuestToUser(pid);
+      }
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Signed in successfully')),

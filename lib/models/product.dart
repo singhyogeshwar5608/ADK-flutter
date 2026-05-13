@@ -12,6 +12,7 @@ class Product {
     required this.bv,
     required this.description,
     required this.shippingCharge,
+    this.gstPercent = 0.0,
     this.images = const [],
     this.stock = 0,
     this.weight = 0,
@@ -27,6 +28,8 @@ class Product {
   final String description;
   final List<ProductImage> images;
   final double shippingCharge;
+  /// GST percentage for this product (e.g., 18.0 for 18% GST)
+  final double gstPercent;
   /// Available units in inventory (from API `stock`).
   final int stock;
   /// Pack / net weight amount (from API `weight`).
@@ -53,6 +56,16 @@ class Product {
         json['primaryImage'] as String? ??
         (parsedImages.isNotEmpty ? parsedImages.first.url : '');
     final imageUrl = normalizeMediaUrl(rawImageUrl);
+    // Parse GST percentage from API with comprehensive fallback
+    final apiGstPercent = _parseDouble(json['gstPercent'] ?? json['gst_percent']);
+    final gstPercent = apiGstPercent > 0 ? apiGstPercent : 10.0; // Use 10% if API returns 0 or null
+    
+    // Debug GST parsing
+    print('=== GST DEBUG ===');
+    print('API Response: $json');
+    print('Parsed GST Percent: $apiGstPercent');
+    print('Final GST Percent: $gstPercent');
+    print('================');
     return Product(
       id: json['id']?.toString() ??
           json['_id']?.toString() ??
@@ -69,6 +82,7 @@ class Product {
       shippingCharge: _parseDouble(
         json['shipping_charge'] ?? json['shippingCharge'],
       ),
+      gstPercent: gstPercent,
       images: parsedImages,
       stock: _parseStock(json['stock'] ?? json['inventory']),
       weight: _parseDouble(json['weight'] ?? json['net_weight']),
@@ -95,6 +109,7 @@ class Product {
     String? description,
     List<ProductImage>? images,
     double? shippingCharge,
+    double? gstPercent,
     int? stock,
     double? weight,
     String? weightUnit,
@@ -108,6 +123,7 @@ class Product {
       bv: bv ?? this.bv,
       description: description ?? this.description,
       shippingCharge: shippingCharge ?? this.shippingCharge,
+      gstPercent: gstPercent ?? this.gstPercent,
       images: images ?? this.images,
       stock: stock ?? this.stock,
       weight: weight ?? this.weight,
@@ -125,6 +141,7 @@ class Product {
       'bv': bv,
       'description': description,
       'shippingCharge': shippingCharge,
+      'gstPercent': gstPercent,
       'stock': stock,
       'weight': weight,
       'weightUnit': weightUnit,
@@ -151,6 +168,24 @@ class Product {
   double get commissionPercent {
     if (totalPrice <= 0 || commissionAmount <= 0) return 0;
     return (commissionAmount / totalPrice) * 100;
+  }
+
+  /// Calculate GST amount for this product
+  double get gstAmount {
+    if (gstPercent <= 0) return 0;
+    return (price * gstPercent) / 100;
+  }
+
+  /// Calculate price before GST (base price)
+  double get priceBeforeGst {
+    if (gstPercent <= 0) return price;
+    return price / (1 + (gstPercent / 100));
+  }
+
+  /// Get formatted GST percentage string (e.g., "18%")
+  String get gstPercentLabel {
+    if (gstPercent <= 0) return '0%';
+    return '${gstPercent.toStringAsFixed(1)}%';
   }
 
   static double _parseDouble(dynamic value) {

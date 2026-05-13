@@ -20,6 +20,37 @@ class CartItem {
   double get totalPrice => product.price * quantity;
   double get totalShipping => product.shippingCharge * quantity;
   int get totalBv => product.bv * quantity;
+  
+  // GST calculations
+  double get totalGst => product.gstAmount * quantity;
+  double get priceBeforeGst => product.priceBeforeGst * quantity;
+  
+  // Debug GST in cart
+  void debugCartGst() {
+    print('=== CART GST DEBUG ===');
+    print('Product ID: ${product.id}');
+    print('Product Name: ${product.title}');
+    print('Product GST Percent: ${product.gstPercent}');
+    print('Product GST Amount: ${product.gstAmount}');
+    print('Product Price: ${product.price}');
+    print('Product Total Price: ${product.totalPrice}');
+    print('Quantity: $quantity');
+    print('Total GST: $totalGst');
+    print('===================');
+  }
+
+  // Debug logging for GST
+  void debugGstCalculation() {
+    print('=== GST Debug ===');
+    print('Product GST Percent: ${product.gstPercent}');
+    print('Product GST Amount: ${product.gstAmount}');
+    print('Product Price Before GST: ${product.priceBeforeGst}');
+    print('Product Total Price: ${product.totalPrice}');
+    print('Quantity: $quantity');
+    print('Total GST: $totalGst');
+    print('Price Before GST Total: $priceBeforeGst');
+    print('=== End GST Debug ===');
+  }
 
   Map<String, dynamic> toJson() {
     return {
@@ -104,6 +135,9 @@ class CartState extends ChangeNotifier {
   CartState({required ProfileState profile}) : _profile = profile {
     _cachedAuthSegment = _profile.isAuthenticated;
     _profile.addListener(_onProfileAuthChanged);
+    print('=== CART STATE INIT DEBUG ===');
+    print('Cart State Initialized');
+    print('========================');
     unawaited(_restoreCart());
   }
 
@@ -150,6 +184,15 @@ class CartState extends ChangeNotifier {
   double get selectedShippingTotal => _items.values
       .where((item) => item.isSelected)
       .fold(0.0, (sum, item) => sum + item.totalShipping);
+  double get selectedTotalGst => _items.values
+      .where((item) => item.isSelected)
+      .fold(0.0, (sum, item) {
+        print('DEBUG: Processing item ${item.product.title} with GST ${item.product.gstPercent} and amount ${item.totalGst}');
+        return sum + item.totalGst;
+      });
+  double get selectedPriceBeforeGst => _items.values
+      .where((item) => item.isSelected)
+      .fold(0.0, (sum, item) => sum + item.priceBeforeGst);
   double get selectedTotal =>
       selectedSubtotal + selectedTax + selectedShippingTotal;
 
@@ -169,6 +212,17 @@ class CartState extends ChangeNotifier {
     } else {
       _items[product.id] = CartItem(product: product, quantity: addQty);
     }
+    
+    // Debug GST when adding product
+    print('=== ADD PRODUCT GST DEBUG ===');
+    print('Product: ${product.title}');
+    print('Product GST Percent: ${product.gstPercent}');
+    print('Product GST Amount: ${product.gstAmount}');
+    print('Product Price: ${product.price}');
+    print('Product Total Price: ${product.totalPrice}');
+    print('Quantity: $addQty');
+    print('============================');
+    
     _persistCart();
     notifyListeners();
   }

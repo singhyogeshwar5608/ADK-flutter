@@ -18,6 +18,10 @@ class ShippingDetailsPayload {
     required this.zipCode,
     required this.shippingAddress,
     this.billingAddress,
+
+    /// Set for **guest** buyers when the backend needs contact email (checkout / orders API).
+    /// Omit when the user is logged in as a member.
+    this.email,
   });
 
   final String fullName;
@@ -28,4 +32,5 @@ class ShippingDetailsPayload {
   final String zipCode;
   final String shippingAddress;
   final String? billingAddress;
+  final String? email;
 }

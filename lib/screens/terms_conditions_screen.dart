@@ -17,14 +17,14 @@ class TermsConditionsScreen extends StatelessWidget {
     final mutedColor = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
 
     TextStyle heading() => TextStyle(
-          fontSize: 17,
+          fontSize: 15,
           fontWeight: FontWeight.w700,
           color: isDark ? _headingBlue : const Color(0xFF0284C7),
           height: 1.35,
         );
 
     TextStyle body() => TextStyle(
-          fontSize: 15,
+          fontSize: 13,
           height: 1.55,
           color: bodyColor,
         );
@@ -54,7 +54,7 @@ class TermsConditionsScreen extends StatelessWidget {
             Text('1. Agreement', style: heading()),
             const SizedBox(height: 8),
             Text(
-              'By downloading or using the NetShop / ADK Partner application, you agree to these Terms & Conditions. If you do not agree, do not use the app.',
+              'By downloading or using the ADK Partner application, you agree to these Terms & Conditions. If you do not agree, do not use the app.',
               style: body(),
             ),
             const SizedBox(height: 20),

@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../services/address_storage_service.dart';
 import '../state/cart_state.dart';
+import '../state/profile_state.dart';
+import '../theme/app_theme.dart';
 import '../widgets/safe_network_image.dart';
 import 'all_products_screen.dart';
 import 'customer_details_screen.dart';
@@ -91,6 +94,8 @@ class CartScreen extends StatelessWidget {
                                     allItemsSelected: cart.allItemsSelected,
                                     onSelectAll: cart.selectAll,
                                     onDeselectAll: cart.deselectAll,
+                                    selectedTotalGst: cart.selectedTotalGst,
+                                    cart: cart,
                                   ),
                                 ],
                               ),
@@ -326,16 +331,171 @@ class _CartItemCard extends StatelessWidget {
             activeColor: colorScheme.primary,
           ),
           const SizedBox(width: 2),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(10),
-            child: SizedBox(
-              width: 68,
-              height: 68,
-              child: ColoredBox(
-                color: const Color(0xFFE2E8F0),
-                child: SafeNetworkImage(
-                  src: item.product.imageUrl,
-                  fit: BoxFit.cover,
+          GestureDetector(
+            onTap: () {
+              showDialog<void>(
+                context: context,
+                barrierDismissible: false,
+                builder: (dialogContext) {
+                  final media = MediaQuery.sizeOf(dialogContext);
+                  final theme = Theme.of(dialogContext);
+                  return Dialog(
+                    insetPadding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+                    backgroundColor: Colors.transparent,
+                    elevation: 0,
+                    child: Container(
+                      width: media.width * 0.9,
+                      height: media.height * 0.65,
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.surface,
+                        borderRadius: BorderRadius.circular(18),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.2),
+                            blurRadius: 20,
+                            offset: const Offset(0, 10),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        children: [
+                          // Header with close button
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.primaryContainer,
+                              borderRadius: const BorderRadius.only(
+                                topLeft: Radius.circular(18),
+                                topRight: Radius.circular(18),
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    item.product.title,
+                                    style: theme.textTheme.titleMedium?.copyWith(
+                                      fontWeight: FontWeight.bold,
+                                      color: theme.colorScheme.onPrimaryContainer,
+                                    ),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                IconButton(
+                                  onPressed: () => Navigator.of(dialogContext).pop(),
+                                  icon: Icon(
+                                    Icons.close,
+                                    color: theme.colorScheme.onPrimaryContainer,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          // Product image
+                          Expanded(
+                            flex: 3,
+                            child: Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(12),
+                                child: ColoredBox(
+                                  color: Colors.black.withValues(alpha: 0.04),
+                                  child: SafeNetworkImage(
+                                    src: item.product.imageUrl,
+                                    fit: BoxFit.contain,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          // Product details
+                          Expanded(
+                            flex: 1,
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text(
+                                        'Price:',
+                                        style: theme.textTheme.bodyMedium?.copyWith(
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                      Text(
+                                        '₹${item.product.price.toStringAsFixed(2)}',
+                                        style: theme.textTheme.titleMedium?.copyWith(
+                                          fontWeight: FontWeight.bold,
+                                          color: theme.colorScheme.primary,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text(
+                                        'Quantity:',
+                                        style: theme.textTheme.bodyMedium?.copyWith(
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                      Text(
+                                        '${item.quantity}',
+                                        style: theme.textTheme.titleMedium?.copyWith(
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text(
+                                        'Total:',
+                                        style: theme.textTheme.bodyMedium?.copyWith(
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                      Text(
+                                        '₹${(item.product.price * item.quantity).toStringAsFixed(2)}',
+                                        style: theme.textTheme.titleMedium?.copyWith(
+                                          fontWeight: FontWeight.bold,
+                                          color: theme.colorScheme.primary,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              );
+            },
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: SizedBox(
+                width: 68,
+                height: 68,
+                child: ColoredBox(
+                  color: const Color(0xFFE2E8F0),
+                  child: SafeNetworkImage(
+                    src: item.product.imageUrl,
+                    fit: BoxFit.cover,
+                  ),
                 ),
               ),
             ),
@@ -666,7 +826,7 @@ class _ImpactSummary extends StatelessWidget {
                   text: 'Total BV Impact: ',
                   style: ttl?.copyWith(
                     fontWeight: FontWeight.w700,
-                    fontSize: (ttl.fontSize ?? 22) - 4,
+                    fontSize: (ttl.fontSize ?? 22) - 8,
                   ),
                   children: [
                     TextSpan(
@@ -707,6 +867,8 @@ class _PricingSummary extends StatelessWidget {
     required this.allItemsSelected,
     required this.onSelectAll,
     required this.onDeselectAll,
+    required this.selectedTotalGst,
+    required this.cart,
   });
 
   final ThemeData theme;
@@ -720,6 +882,8 @@ class _PricingSummary extends StatelessWidget {
   final bool allItemsSelected;
   final VoidCallback onSelectAll;
   final VoidCallback onDeselectAll;
+  final double selectedTotalGst;
+  final CartState cart;
 
   @override
   Widget build(BuildContext context) {
@@ -736,7 +900,8 @@ class _PricingSummary extends StatelessWidget {
       final valBase = bold ? theme.textTheme.titleMedium : theme.textTheme.bodyMedium;
       final valStyle = valBase?.copyWith(
         color: valueColor ?? theme.colorScheme.onSurface,
-        fontWeight: bold ? FontWeight.w700 : FontWeight.w600,
+        fontWeight: bold ? FontWeight.w600 : FontWeight.w500,
+        fontSize: (valBase?.fontSize ?? 16) - 2,
         height: 1.2,
       );
       return Padding(
@@ -813,12 +978,47 @@ class _PricingSummary extends StatelessWidget {
           child: Column(
             children: [
               row('Subtotal (selected)', format(selectedSubtotal)),
-              row('Tax (est.)', format(selectedTax)),
               row('Shipping', format(selectedShippingTotal)),
-              Divider(height: 16, thickness: 1, color: divider.withValues(alpha: 0.45)),
-              row('Estimated total',
-                  format(selectedTotal),
+              Divider(
+                  height: 16,
+                  thickness: 1,
+                  color: divider.withValues(alpha: 0.45)),
+              row('Estimated total', format(selectedTotal),
                   valueColor: colorScheme.primary, bold: true),
+              const SizedBox(height: 12),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: BoxDecoration(
+                  color: AppColors.mlmGreen.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: AppColors.mlmGreen.withValues(alpha: 0.2),
+                    width: 1,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.verified_user_outlined,
+                      size: 14,
+                      color: AppColors.mlmGreen,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'All prices include GST and applicable taxes',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.mlmGreen,
+                          letterSpacing: -0.1,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
@@ -916,8 +1116,31 @@ class _Footer extends StatelessWidget {
                     elevation: 5,
                     shadowColor: const Color(0xFF2B9DEE).withValues(alpha: 0.28),
                   ),
-                  onPressed: () => Navigator.of(context)
-                      .pushNamed(CustomerDetailsScreen.routeName),
+                  onPressed: () async {
+                    final profile =
+                        ProfileProvider.of(context, listen: false).data;
+                    final uid = profile.partnerId.trim().isEmpty
+                        ? null
+                        : profile.partnerId.trim();
+                    final list =
+                        await AddressStorageService.instance.listForUserId(uid);
+                    if (!context.mounted) return;
+                    if (list.isNotEmpty) {
+                      final primary = AddressStorageService.instance
+                          .pickPrimaryForCheckout(list);
+                      final payload = primary.toShippingDetailsPayload();
+                      await AddressStorageService.instance
+                          .writeCheckoutShippingOverride(payload);
+                      await AddressStorageService.instance
+                          .markAddressUsed(primary.id, userId: uid);
+                      if (!context.mounted) return;
+                      await Navigator.of(context).pushNamed('/checkout',
+                          arguments: payload);
+                    } else {
+                      await Navigator.of(context).pushNamed(
+                          CustomerDetailsScreen.routeName);
+                    }
+                  },
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [

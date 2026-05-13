@@ -259,6 +259,7 @@ class _IconBadgeButton extends StatelessWidget {
         ),
         child: IconButton(
           icon: Icon(icon),
+          iconSize: 21,
           color: Theme.of(context).colorScheme.onSurface,
           onPressed: onPressed ?? () {},
         ),

@@ -272,7 +272,7 @@ class _ProductCardState extends State<ProductCard> {
         final bodyPadding = EdgeInsets.all(isCompactCard ? 10 : 16);
         final titleStyle = theme.textTheme.labelLarge?.copyWith(
           fontWeight: FontWeight.w700,
-          fontSize: isCompactCard ? 13 : null,
+          fontSize: isCompactCard ? 10 : null,
         );
         final priceStyle = theme.textTheme.titleSmall?.copyWith(
           color: theme.colorScheme.primary,

@@ -590,7 +590,7 @@ class _FilterSheetActions extends StatelessWidget {
           child: OutlinedButton(
             onPressed: onClear,
             style: OutlinedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(vertical: 16),
+              padding: const EdgeInsets.symmetric(vertical: 10),
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(18)),
               side:
@@ -606,7 +606,7 @@ class _FilterSheetActions extends StatelessWidget {
             style: FilledButton.styleFrom(
               backgroundColor: Colors.black,
               foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 16),
+              padding: const EdgeInsets.symmetric(vertical: 10),
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(22)),
             ),
@@ -660,7 +660,7 @@ class _AllProductsScreenState extends State<AllProductsScreen> {
       barrierColor: Colors.black.withValues(alpha: 0.25),
       backgroundColor: Colors.transparent,
       builder: (context) => FractionallySizedBox(
-        heightFactor: 0.68,
+        heightFactor: 0.45,
         child: _FilterSheet(
           entries: List<ProductCatalogEntry>.from(entries),
           initialBrands: _selectedBrands,
@@ -703,42 +703,36 @@ class _AllProductsScreenState extends State<AllProductsScreen> {
               elevation: 0,
               backgroundColor: theme.colorScheme.surface,
               surfaceTintColor: Colors.transparent,
-              leadingWidth: 64,
-              leading: IconButton(
-                icon: const Icon(Icons.arrow_back),
-                onPressed: () => Navigator.of(context).maybePop(),
+              leadingWidth: 56,
+              leading: Padding(
+                padding: const EdgeInsets.only(left: 8),
+                child: IconButton(
+                  icon: const Icon(Icons.arrow_back),
+                  onPressed: () => Navigator.of(context).maybePop(),
+                ),
               ),
               actions: [
                 Padding(
-                  padding: const EdgeInsets.only(right: 12),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.tune),
-                        onPressed: () => _openFilterSheet(sourceEntries),
-                      ),
-                    ],
+                  padding: const EdgeInsets.only(right: 10),
+                  child: IconButton(
+                    icon: const Icon(Icons.tune),
+                    onPressed: () => _openFilterSheet(sourceEntries),
                   ),
                 ),
               ],
-              centerTitle: true,
-              title: Text(
-                'Products',
-                style: theme.textTheme.titleLarge
-                    ?.copyWith(fontWeight: FontWeight.w700),
-              ),
-              bottom: PreferredSize(
-                preferredSize: const Size.fromHeight(60),
+              title: Expanded(
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
                   child: SizedBox(
-                    height: 46,
+                    height: 40,
+                    width: double.infinity,
                     child: TextField(
                       controller: _searchController,
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         hintText: 'Search product name or category',
+                        hintStyle: theme.textTheme.bodyLarge?.copyWith(fontSize: (theme.textTheme.bodyLarge?.fontSize ?? 16) - 3),
                       ),
+                      style: theme.textTheme.bodyLarge?.copyWith(fontSize: (theme.textTheme.bodyLarge?.fontSize ?? 16) - 2),
                       onChanged: (_) => setState(() {}),
                     ),
                   ),

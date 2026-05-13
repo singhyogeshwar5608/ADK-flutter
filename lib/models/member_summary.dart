@@ -8,6 +8,7 @@ class MemberSummary {
     this.email,
     this.status,
     this.profileImage,
+    this.qrCodeUrl,
     this.teamSize,
     this.totalBv,
     this.totalTeamBV,
@@ -26,6 +27,7 @@ class MemberSummary {
   final String? email;
   final String? status;
   final String? profileImage;
+  final String? qrCodeUrl;
   final int? teamSize;
   final double? totalBv;
   final double? totalTeamBV;
@@ -46,6 +48,7 @@ class MemberSummary {
       email: json['email']?.toString(),
       status: json['status']?.toString(),
       profileImage: _normProfile(json['profileImage']?.toString()),
+      qrCodeUrl: _normProfile(json['qrCodeUrl']?.toString()),
       teamSize: json['stats']?['teamSize'] as int? ?? json['teamSize'] as int?,
       totalBv: (json['totalBv'] as num?)?.toDouble(),
       totalTeamBV: (json['stats']?['totalTeamBV'] as num?)?.toDouble(),

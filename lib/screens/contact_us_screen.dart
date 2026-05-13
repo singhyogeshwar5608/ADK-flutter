@@ -99,6 +99,21 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
     }
   }
 
+  Future<void> _launchGoogleMaps(String address) async {
+    final String encodedAddress = Uri.encodeComponent(address);
+    final String googleMapsUrl = 'https://www.google.com/maps/search/?api=1&query=$encodedAddress';
+    final Uri uri = Uri.parse(googleMapsUrl);
+    try {
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } else {
+        _showErrorSnackBar('Could not launch Google Maps');
+      }
+    } catch (e) {
+      _showErrorSnackBar('Error launching Google Maps: $e');
+    }
+  }
+
   void _copyToClipboard(String text) {
     Clipboard.setData(ClipboardData(text: text));
     ScaffoldMessenger.of(context).showSnackBar(
@@ -143,7 +158,7 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
           children: [
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: [
@@ -167,23 +182,23 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
                 children: [
                   Icon(
                     Icons.contact_support,
-                    size: 48,
+                    size: 42,
                     color: Colors.white,
                   ),
-                  SizedBox(height: 12),
+                  SizedBox(height: 8),
                   Text(
                     'Get in Touch',
                     style: TextStyle(
-                      fontSize: 24,
+                      fontSize: 21,
                       fontWeight: FontWeight.bold,
                       color: Colors.white,
                     ),
                   ),
-                  SizedBox(height: 8),
+                  SizedBox(height: 6),
                   Text(
                     'We\'re here to help! Reach out to us anytime.',
                     style: TextStyle(
-                      fontSize: 16,
+                      fontSize: 13,
                       color: Colors.white70,
                     ),
                   ),
@@ -195,7 +210,13 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
 
             _buildSectionHeader('Contact Details'),
             const SizedBox(height: 12),
-            ..._contactInfo.map((contact) => _buildContactCard(contact)),
+            _buildContactCard(_contactInfo[0]), // Phone
+            const SizedBox(height: 12),
+            _buildContactCard(_contactInfo[1]), // Email
+            const SizedBox(height: 12),
+            _buildContactCard(_contactInfo[2]), // WhatsApp
+            const SizedBox(height: 12),
+            _buildContactCard(_contactInfo[3]), // Address
 
             const SizedBox(height: 24),
           ],
@@ -208,7 +229,7 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
     return Text(
       title,
       style: const TextStyle(
-        fontSize: 20,
+        fontSize: 17,
         fontWeight: FontWeight.bold,
         color: AppColors.mlmGreen,
       ),
@@ -218,6 +239,7 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
   Widget _buildContactCard(Map<String, dynamic> contact) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(12),
@@ -234,50 +256,78 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
           ),
         ],
       ),
-      child: ListTile(
-        contentPadding: const EdgeInsets.all(16),
-        leading: Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: contact['color'].withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(12),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: contact['color'].withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(
+              contact['icon'],
+              color: contact['color'],
+              size: 24,
+            ),
           ),
-          child: Icon(
-            contact['icon'],
-            color: contact['color'],
-            size: 24,
-          ),
-        ),
-        title: Text(
-          contact['title'],
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 16,
-          ),
-        ),
-        subtitle: contact.containsKey('address')
-            ? Text(
-                contact['address'] as String,
-                style: TextStyle(
-                  color: Theme.of(context)
-                      .colorScheme
-                      .onSurface
-                      .withValues(alpha: 0.7),
-                  fontSize: 14,
-                  height: 1.4,
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  contact['title'],
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                  ),
                 ),
-              )
-            : Text(
-                contact['subtitle'] as String,
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.outline,
-                  fontSize: 14,
-                ),
-              ),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: _buildActionButtons(contact),
-        ),
+                const SizedBox(height: 4),
+                contact.containsKey('address')
+                    ? Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            contact['address'] as String,
+                            style: TextStyle(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurface
+                                  .withValues(alpha: 0.7),
+                              fontSize: 12,
+                              height: 1.4,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          GestureDetector(
+                            onTap: () => _launchGoogleMaps(contact['address'] as String),
+                            child: Text(
+                              'Visit',
+                              style: TextStyle(
+                                color: AppColors.mlmGreen,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                decoration: TextDecoration.underline,
+                              ),
+                            ),
+                          ),
+                        ],
+                      )
+                    : Text(
+                        contact['subtitle'] as String,
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.outline,
+                          fontSize: 12,
+                        ),
+                      ),
+              ],
+            ),
+          ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: _buildActionButtons(contact),
+          ),
+        ],
       ),
     );
   }

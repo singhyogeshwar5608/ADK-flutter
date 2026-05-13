@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 
-/// Web build: never import `pusher_client` (avoids DDC / web init failures).
+/// Web build: Reverb/WebSocket IO stack is omitted (use HTTP refresh only).
 class ProductCatalogRealtime {
   ProductCatalogRealtime();
 

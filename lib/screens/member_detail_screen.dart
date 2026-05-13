@@ -18,6 +18,7 @@ class MemberDetailArguments {
     required this.joinedAgo,
     required this.growth,
     required this.focusAreas,
+    this.qrCodeUrl,
   });
 
   final String memberId;
@@ -36,6 +37,7 @@ class MemberDetailArguments {
   final String joinedAgo;
   final double growth;
   final List<String> focusAreas;
+  final String? qrCodeUrl;
 }
 
 class MemberDetailScreen extends StatelessWidget {
@@ -65,6 +67,10 @@ class MemberDetailScreen extends StatelessWidget {
                 child: Column(
                   children: [
                     _ProfileHero(member: member),
+                    if (member.qrCodeUrl != null) ...[
+                      const SizedBox(height: 16),
+                      _MemberQRCodeCard(qrCodeUrl: member.qrCodeUrl!),
+                    ],
                     const SizedBox(height: 16),
                     _MetricsGrid(member: member),
                     const SizedBox(height: 16),
@@ -641,6 +647,100 @@ class _TeamSnapshot extends StatelessWidget {
                 ),
               ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+class _MemberQRCodeCard extends StatelessWidget {
+  const _MemberQRCodeCard({required this.qrCodeUrl});
+
+  final String qrCodeUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E293B) : Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: theme.colorScheme.primary.withValues(alpha: 0.1),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(
+                  Icons.qr_code_scanner_rounded,
+                  size: 20,
+                  color: theme.colorScheme.primary,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                'Member Payment QR',
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  color: theme.colorScheme.onSurface,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Container(
+            width: 140,
+            height: 140,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                width: 2,
+              ),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(14),
+              child: Image.network(
+                qrCodeUrl,
+                fit: BoxFit.cover,
+                loadingBuilder: (context, child, progress) {
+                  if (progress == null) return child;
+                  return const Center(
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  );
+                },
+                errorBuilder: (context, error, stack) => const Center(
+                  child: Icon(Icons.broken_image_outlined, color: Colors.red),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Scan to make payment to this member.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+            ),
+          ),
         ],
       ),
     );

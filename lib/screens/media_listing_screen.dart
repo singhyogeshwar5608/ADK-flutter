@@ -298,10 +298,6 @@ class _MediaListingScreenState extends State<MediaListingScreen> {
                           ],
                         ),
                       ),
-                      IconButton(
-                        onPressed: _openFilters,
-                        icon: const Icon(Icons.filter_list_rounded),
-                      ),
                     ],
                   ),
                   const SizedBox(height: 10),

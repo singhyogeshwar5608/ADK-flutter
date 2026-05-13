@@ -1,0 +1,9 @@
+# Wishlist sharing deep links — Allow app to handle
+/w/*    /index.html   404
+
+# Referral / signup deep links — Allow app to handle  
+/signup    /index.html   404
+/signup/*    /index.html   404
+
+# React SPA — Serve admin panel for all other routes
+/*    /index.html   200

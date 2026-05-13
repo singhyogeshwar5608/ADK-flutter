@@ -74,7 +74,6 @@ class _WithdrawHeader extends StatelessWidget {
               style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
             ),
           ),
-          _CircleIconButton(icon: Icons.help_outline, onTap: () {}),
         ],
       ),
     );

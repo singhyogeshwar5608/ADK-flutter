@@ -79,8 +79,12 @@ class _HomeScreenState extends State<HomeScreen> {
     ];
 
     if (remoteCategories.isEmpty) {
-      cards.addAll(_fallbackCategoryCards.map((card) =>
-          card.copyWith(productCount: _countProductsFor(card.label, source))));
+      cards.add(CategoryCardData(
+        label: 'No categories yet uploaded from admin panel',
+        icon: Icons.inbox_outlined,
+        heroImage: '',
+        productCount: 0,
+      ));
       return cards;
     }
 
@@ -240,7 +244,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: LayoutBuilder(
                   builder: (context, constraints) {
                     final availableWidth = constraints.maxWidth;
-                    const spacing = 6.0;
+                    const spacing = 16.0;
                     final itemWidth = _featuredGridView
                         ? (availableWidth - spacing) / 2
                         : availableWidth;

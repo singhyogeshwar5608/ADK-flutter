@@ -141,7 +141,11 @@ class _CataloguePage extends StatelessWidget {
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(24),
                 ),
-                child: Image.network(imageUrl, fit: BoxFit.cover),
+                child: Image.network(
+                  imageUrl,
+                  fit: BoxFit.contain,
+                  alignment: Alignment.center,
+                ),
               ),
               Align(
                 alignment: Alignment.bottomLeft,

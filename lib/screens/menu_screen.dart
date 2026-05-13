@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../screens/addresses_screen.dart';
 import '../screens/media_listing_screen.dart';
 import '../screens/adk_events_screen.dart';
 import '../screens/product_catalogue_screen.dart';
@@ -37,6 +38,14 @@ class MenuScreen extends StatelessWidget {
   }
 
   List<_MenuItem> _menuItems(BuildContext context) => [
+        _MenuItem(
+          title: 'Saved addresses',
+          subtitle: 'Add, edit, and choose delivery addresses',
+          icon: Icons.location_on_outlined,
+          color: const Color(0xFF0EA5E9),
+          onTap: () =>
+              Navigator.of(context).pushNamed(AddressesScreen.routeName),
+        ),
         _MenuItem(
           title: 'Media Gallery',
           subtitle: 'Upload & manage event visuals',

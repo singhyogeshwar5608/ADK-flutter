@@ -1,13 +1,16 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:pusher_client/pusher_client.dart';
+import 'package:pusher_reverb_flutter/pusher_reverb_flutter.dart';
 
-/// Mobile / desktop: Reverb / Pusher realtime for catalog updates.
+/// Mobile / desktop: Laravel Reverb realtime for catalog updates (Pusher protocol).
 class ProductCatalogRealtime {
-  PusherClient? _pusher;
+  static const _channelName = 'members.products';
+
   Channel? _channel;
+  final Map<String, ChannelEventListener> _handlers = {};
   bool _connected = false;
-  List<String> _boundEvents = const [];
 
   Future<bool> connect({
     required void Function() onProductEvent,
@@ -21,63 +24,76 @@ class ProductCatalogRealtime {
       return false;
     }
 
-    final host = dotenv.env['REVERB_HOST'] ?? '127.0.0.1';
+    final reverbHost = dotenv.env['REVERB_HOST'] ?? '127.0.0.1';
     final port = int.tryParse(dotenv.env['REVERB_PORT'] ?? '80') ?? 80;
     final scheme = dotenv.env['REVERB_SCHEME'] ?? 'http';
-    final encrypted = scheme == 'https';
-    final options = PusherOptions(
-      host: host,
-      wsPort: port,
-      wssPort: port,
-      encrypted: encrypted,
-      cluster: 'mt1',
-    );
+    final useTLS = scheme == 'https';
 
-    final pusher = PusherClient(
-      appKey,
-      options,
-      autoConnect: false,
-      enableLogging: false,
-    );
+    ReverbClient.resetInstance();
 
-    pusher.onConnectionStateChange((state) {
-      debugPrint('Pusher state: ${state?.currentState}');
-    });
+    try {
+      final client = ReverbClient.instance(
+        host: reverbHost,
+        port: port,
+        appKey: appKey,
+        useTLS: useTLS,
+        onError: (error) {
+          debugPrint('Reverb connection error: $error');
+        },
+      );
 
-    pusher.onConnectionError((error) {
-      debugPrint('Pusher connection error: $error');
-    });
+      await client.connect();
 
-    pusher.connect();
+      await client.onConnectionStateChange
+          .firstWhere((s) => s == ConnectionState.connected)
+          .timeout(
+            const Duration(seconds: 15),
+            onTimeout: () => throw TimeoutException('Reverb handshake'),
+          );
 
-    final channel = pusher.subscribe('members.products');
-    _boundEvents = eventNames.map((e) => e.toString()).toList(growable: false);
-    for (final eventName in _boundEvents) {
-      channel.bind(eventName, (PusherEvent? event) {
-        final name = event?.eventName ?? '';
-        if (name.startsWith('products.')) {
-          onProductEvent();
+      _channel = client.subscribeToChannel(_channelName);
+
+      for (final eventName in eventNames) {
+        final name = eventName.toString();
+        void listener(String event, dynamic data) {
+          if (event.startsWith('products.')) {
+            onProductEvent();
+          }
         }
-      });
-    }
 
-    _pusher = pusher;
-    _channel = channel;
-    _connected = true;
-    return true;
+        _channel!.bind(name, listener);
+        _handlers[name] = listener;
+      }
+
+      _connected = true;
+      return true;
+    } catch (e, stack) {
+      debugPrint('Reverb realtime connect failed: $e');
+      debugPrintStack(stackTrace: stack);
+      ReverbClient.resetInstance();
+      _channel = null;
+      _handlers.clear();
+      return false;
+    }
   }
 
   void dispose() {
     if (!_connected) return;
-    const channelName = 'members.products';
-    for (final name in _boundEvents) {
-      _channel?.unbind(name);
+
+    final client = ReverbClient.instance();
+
+    if (_channel != null) {
+      for (final e in _handlers.entries) {
+        _channel!.unbind(e.key, e.value);
+      }
     }
-    _pusher?.unsubscribe(channelName);
-    _pusher?.disconnect();
-    _pusher = null;
+    _handlers.clear();
+
+    client.unsubscribeFromChannel(_channelName);
     _channel = null;
-    _boundEvents = const [];
+    client.disconnect();
+    ReverbClient.resetInstance();
+
     _connected = false;
   }
 }

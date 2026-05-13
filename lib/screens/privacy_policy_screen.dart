@@ -17,14 +17,14 @@ class PrivacyPolicyScreen extends StatelessWidget {
     final mutedColor = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
 
     TextStyle heading() => TextStyle(
-          fontSize: 17,
+          fontSize: 15,
           fontWeight: FontWeight.w700,
           color: isDark ? _headingBlue : const Color(0xFF0284C7),
           height: 1.35,
         );
 
     TextStyle body() => TextStyle(
-          fontSize: 15,
+          fontSize: 13,
           height: 1.55,
           color: bodyColor,
         );
@@ -54,7 +54,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
             Text('1. Introduction', style: heading()),
             const SizedBox(height: 8),
             Text(
-              'NetShop / ADK Partner ("we", "us") respects your privacy. This policy explains how we handle information when you use our mobile application and related services.',
+              'ADK Partner ("we", "us") respects your privacy. This policy explains how we handle information when you use our mobile application and related services.',
               style: body(),
             ),
             const SizedBox(height: 20),

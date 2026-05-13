@@ -52,13 +52,13 @@ class _HeroBannerState extends State<HeroBanner> {
           .map((s) => _BannerData(imageUrl: s.imageUrl))
           .toList(growable: false);
       setState(() {
-        _banners = mapped.isNotEmpty ? mapped : List<_BannerData>.from(_fallbackBanners);
+        _banners = mapped;
         _loading = false;
       });
     } catch (_) {
       if (!mounted) return;
       setState(() {
-        _banners = List<_BannerData>.from(_fallbackBanners);
+        _banners = [];
         _loading = false;
       });
     }
@@ -111,9 +111,23 @@ class _HeroBannerState extends State<HeroBanner> {
           return SizedBox(
             height: minHeight,
             child: Center(
-              child: Text(
-                'No hero banners',
-                style: theme.textTheme.bodyMedium,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.inbox_outlined,
+                    size: 48,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'No banners yet uploaded from admin panel',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
               ),
             ),
           );

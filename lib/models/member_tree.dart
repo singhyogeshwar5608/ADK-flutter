@@ -9,6 +9,7 @@ class MemberNode {
     required this.depth,
     this.leg,
     this.profileImage,
+    this.qrCodeUrl,
     this.sponsorId,
     this.email,
     this.phone,
@@ -31,6 +32,7 @@ class MemberNode {
   final int depth;
   final String? leg;
   final String? profileImage;
+  final String? qrCodeUrl;
   final String? sponsorId;
   final String? email;
   final String? phone;
@@ -65,6 +67,7 @@ class MemberNode {
       depth: (json['depth'] as num?)?.toInt() ?? 0,
       leg: json['leg'] as String?,
       profileImage: json['profileImage'] as String?,
+      qrCodeUrl: json['qrCodeUrl'] as String?,
       sponsorId: json['sponsorId'] as String?,
       email: json['email'] as String?,
       phone: json['phone'] as String?,

@@ -28,9 +28,11 @@ class ProductDetailsScreen extends StatefulWidget {
 
 class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
   int _quantity = 1;
+  late Product _product;
+  late final ScrollController _scrollController;
 
   int get _maxOrderQuantity =>
-      widget.product.stock > 0 ? widget.product.stock : 99;
+      _product.stock > 0 ? _product.stock : 99;
 
   void _setQuantity(int value) {
     final clamped = value.clamp(1, _maxOrderQuantity);
@@ -39,9 +41,46 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
   }
 
   @override
+  void initState() {
+    super.initState();
+    _product = widget.product;
+    _scrollController = ScrollController();
+  }
+
+  @override
+  void didUpdateWidget(covariant ProductDetailsScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.product.id != widget.product.id) {
+      _product = widget.product;
+      _quantity = 1;
+    }
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _openRelatedProduct(Product product) {
+    if (product.id == _product.id) return;
+    setState(() {
+      _product = product;
+      _quantity = 1;
+    });
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        0,
+        duration: const Duration(milliseconds: 350),
+        curve: Curves.easeOutCubic,
+      );
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final product = widget.product;
+    final product = _product;
     final catalogState = ProductCatalogProvider.of(context);
     final sourceEntries = catalogState.entries;
     final relatedEntries =
@@ -61,6 +100,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 430),
                   child: SingleChildScrollView(
+                    controller: _scrollController,
                     padding: const EdgeInsets.fromLTRB(16, 96, 16, 132),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -80,7 +120,10 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                         const SizedBox(height: 20),
                         _DescriptionSection(description: product.description),
                         const SizedBox(height: 24),
-                        RelatedProductsSection(entries: relatedEntries),
+                        RelatedProductsSection(
+                          entries: relatedEntries,
+                          onProductTap: _openRelatedProduct,
+                        ),
                         const SizedBox(height: 32),
                       ],
                     ),
@@ -930,9 +973,11 @@ class RelatedProductsSection extends StatelessWidget {
   const RelatedProductsSection({
     super.key,
     required this.entries,
+    required this.onProductTap,
   });
 
   final List<ProductCatalogEntry> entries;
+  final void Function(Product product) onProductTap;
 
   @override
   Widget build(BuildContext context) {
@@ -962,8 +1007,11 @@ class RelatedProductsSection extends StatelessWidget {
               final entry = entries[index];
               return SizedBox(
                 width: 230,
-                child:
-                    ProductCard(product: entry.product, rating: entry.rating),
+                child: ProductCard(
+                  product: entry.product,
+                  rating: entry.rating,
+                  onProductTap: () => onProductTap(entry.product),
+                ),
               );
             },
           ),

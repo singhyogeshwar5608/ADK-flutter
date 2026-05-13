@@ -5,6 +5,7 @@ import '../theme/app_theme.dart';
 import '../models/product.dart';
 import '../screens/product_details_screen.dart';
 import '../state/cart_state.dart';
+import '../state/profile_state.dart';
 import '../state/wishlist_state.dart';
 import '../widgets/safe_network_image.dart';
 
@@ -20,6 +21,17 @@ class WishlistScreen extends StatelessWidget {
       );
       return;
     }
+
+    // Generate token for wishlist sharing
+    final profile = ProfileProvider.of(context, listen: false).data;
+    final userId = profile.partnerId.trim().isEmpty ? 'guest' : profile.partnerId.trim();
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final token = '$userId-$timestamp'; // Simple token generation (in production, use backend API)
+
+    // Generate HTTPS deep link for wishlist
+    final wishlistLink = 'https://aslidesikisan.netlify.app/w/$token';
+
+    // Create share text with link
     final buffer = StringBuffer('My wishlist (${items.length} items)\n\n');
     for (var i = 0; i < items.length; i++) {
       final p = items[i];
@@ -27,6 +39,8 @@ class WishlistScreen extends StatelessWidget {
         '${i + 1}. ${p.title} — ₹${p.price.toStringAsFixed(2)} · ${p.bv} BV',
       );
     }
+    buffer.writeln('\nView my wishlist: $wishlistLink');
+
     await Share.share(buffer.toString(), subject: 'My wishlist');
   }
 

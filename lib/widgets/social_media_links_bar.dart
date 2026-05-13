@@ -10,19 +10,19 @@ class SocialMediaLinksBar extends StatelessWidget {
       icon: Icons.play_circle_filled_rounded,
       color: Color(0xFFFF0000),
       tooltip: 'YouTube',
-      url: 'https://youtube.com/@adkofficial',
+      url: 'https://youtube.com/@asliidesikisanpvtltd?si=EpJO_6kU0fzym7hd',
     ),
     _SocialLink(
       icon: Icons.facebook_rounded,
       color: Color(0xFF1877F2),
       tooltip: 'Facebook',
-      url: 'https://facebook.com/adkofficial',
+      url: 'https://www.facebook.com/share/1AMPTEso3E/',
     ),
     _SocialLink(
       icon: Icons.camera_alt_rounded,
       color: Color(0xFFE4405F),
       tooltip: 'Instagram',
-      url: 'https://instagram.com/adkofficial',
+      url: 'https://www.instagram.com/aslidesikianpvt.ltd?igsh=MXgyYnRpcmdoeDBleg==',
     ),
   ];
 

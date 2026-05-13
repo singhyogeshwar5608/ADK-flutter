@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'dart:async';
 
+import 'screens/address_form_screen.dart';
+import 'screens/addresses_screen.dart';
 import 'screens/add_funds_screen.dart';
 import 'screens/binary_tree_screen.dart';
 import 'screens/cart_screen.dart';
@@ -36,6 +39,7 @@ import 'state/cart_state.dart';
 import 'state/profile_state.dart';
 import 'state/wishlist_state.dart';
 import 'theme/app_theme.dart';
+import 'utils/deep_link_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -54,6 +58,9 @@ class NetShopApp extends StatefulWidget {
 }
 
 class _NetShopAppState extends State<NetShopApp> {
+  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
+  late final DeepLinkService _deepLinks = DeepLinkService(_navigatorKey);
+
   late final CartState _cartState;
   late final ProfileState _profileState;
   late final WishlistState _wishlistState;
@@ -68,10 +75,13 @@ class _NetShopAppState extends State<NetShopApp> {
     _wishlistState = WishlistState(profile: _profileState);
     _themeController = ThemeController();
     _productCatalogState = ProductCatalogState();
+    // Best-effort; doesn't block app startup.
+    unawaited(_deepLinks.start());
   }
 
   @override
   void dispose() {
+    _deepLinks.dispose();
     _cartState.dispose();
     _profileState.dispose();
     _wishlistState.dispose();
@@ -100,6 +110,7 @@ class _NetShopAppState extends State<NetShopApp> {
                   theme: AppTheme.lightTheme,
                   darkTheme: AppTheme.darkTheme,
                   themeMode: _themeController.mode,
+                  navigatorKey: _navigatorKey,
                   home: const HomeScreen(),
                   onGenerateRoute: (settings) {
                     if (settings.name == BinaryTreeScreen.routeName) {
@@ -127,6 +138,8 @@ class _NetShopAppState extends State<NetShopApp> {
                         const AllProductsScreen(),
                     CustomerDetailsScreen.routeName: (_) =>
                         const CustomerDetailsScreen(),
+                    AddressesScreen.routeName: (_) => const AddressesScreen(),
+                    AddressFormScreen.routeName: (_) => const AddressFormScreen(),
                     NotificationsScreen.routeName: (_) =>
                         const NotificationsScreen(),
                     MyTeamScreen.routeName: (_) => const MyTeamScreen(),

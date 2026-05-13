@@ -372,6 +372,7 @@ class _MyTeamBody extends StatelessWidget {
       joinedAgo: 'Recently',
       growth: 0.0,
       focusAreas: const ['Growth', 'Training'],
+      qrCodeUrl: member.qrCodeUrl,
     );
   }
 }

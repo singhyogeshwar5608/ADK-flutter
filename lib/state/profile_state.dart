@@ -40,6 +40,7 @@ class ProfileData {
     this.repurchaseMatchingIncome,
     this.sponsorAwardKitIncome,
     this.placementLeg,
+    this.qrCodeUrl,
   });
 
   final String name;
@@ -58,6 +59,7 @@ class ProfileData {
   final double incomeGoal;
   final double monthlyGrowthPercent;
   final String? photoPublicId;
+  final String? qrCodeUrl;
   final double? walletBalance;
   final double? leftLegBv;
   final double? rightLegBv;
@@ -138,6 +140,7 @@ class ProfileData {
     double? repurchaseMatchingIncome,
     double? sponsorAwardKitIncome,
     String? placementLeg,
+    String? qrCodeUrl,
   }) {
     return ProfileData(
       name: name ?? this.name,
@@ -156,6 +159,7 @@ class ProfileData {
       incomeGoal: incomeGoal ?? this.incomeGoal,
       monthlyGrowthPercent: monthlyGrowthPercent ?? this.monthlyGrowthPercent,
       photoPublicId: photoPublicId ?? this.photoPublicId,
+      qrCodeUrl: qrCodeUrl ?? this.qrCodeUrl,
       walletBalance: walletBalance ?? this.walletBalance,
       leftLegBv: leftLegBv ?? this.leftLegBv,
       rightLegBv: rightLegBv ?? this.rightLegBv,
@@ -265,6 +269,7 @@ class ProfileState extends ChangeNotifier {
     double? repurchaseMatchingIncome,
     double? sponsorAwardKitIncome,
     String? placementLeg,
+    String? qrCodeUrl,
   }) {
     _data = _data.copyWith(
       name: name,
@@ -277,6 +282,7 @@ class ProfileState extends ChangeNotifier {
       membershipTier: membershipTier,
       photoUrl: photoUrl,
       photoPublicId: photoPublicId,
+      qrCodeUrl: qrCodeUrl,
       followers: followers,
       following: following,
       level: level,
@@ -432,6 +438,9 @@ class ProfileState extends ChangeNotifier {
             0.0)
         : 0.0;
 
+    final qrCodeRaw = str(member['qrCodeUrl'] ?? member['qr_code_url']);
+    final qrCodeUrl = qrCodeRaw != null ? normalizeMediaUrl(qrCodeRaw) : null;
+
     updateFields(
       name: str(member['fullName'] ?? member['full_name']) ?? '',
       email: str(member['email']) ?? '',
@@ -443,6 +452,7 @@ class ProfileState extends ChangeNotifier {
       membershipTier: role,
       level: role,
       photoUrl: photoUrl,
+      qrCodeUrl: qrCodeUrl,
       photoPublicId:
           str(member['profilePublicId'] ?? member['profile_public_id']),
       followers: directRefs ?? 0,
@@ -490,6 +500,21 @@ class ProfileState extends ChangeNotifier {
     _error = null;
     _data = _guestProfile;
     notifyListeners();
+  }
+
+  Future<void> updateQrCode(String url) async {
+    _isLoading = true;
+    notifyListeners();
+    try {
+      final updated = await _apiClient.updateProfile(qrCodeUrl: url);
+      updateFromMemberPayload(updated);
+    } catch (e) {
+      _error = e.toString();
+      rethrow;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 }
 

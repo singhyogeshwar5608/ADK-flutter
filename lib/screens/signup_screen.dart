@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../routes/app_routes.dart';
+import '../services/address_storage_service.dart';
 import '../services/api_client.dart';
 import '../services/cloudinary_service.dart';
 import '../state/profile_state.dart';
@@ -61,6 +62,7 @@ class _SignupScreenState extends State<SignupScreen> {
   bool _referralResolved = false;
   String? _referralCode;
   String _selectedLeg = 'LEFT';
+  bool _legLocked = false;
   String? _submitError;
   File? _localPhoto;
   Uint8List? _localPhotoBytes;
@@ -82,7 +84,10 @@ class _SignupScreenState extends State<SignupScreen> {
       final c = args.referralCode?.trim();
       if (c != null && c.isNotEmpty) _referralCode = c;
       final l = args.leg?.trim().toUpperCase();
-      if (l == 'LEFT' || l == 'RIGHT') _selectedLeg = l!;
+      if (l == 'LEFT' || l == 'RIGHT') {
+        _selectedLeg = l!;
+        _legLocked = true;
+      }
     }
 
     if (kIsWeb) {
@@ -91,7 +96,10 @@ class _SignupScreenState extends State<SignupScreen> {
           ? q.referralCode!.trim()
           : _referralCode;
       final l = q.leg?.trim().toUpperCase();
-      if (l == 'LEFT' || l == 'RIGHT') _selectedLeg = l!;
+      if (l == 'LEFT' || l == 'RIGHT') {
+        _selectedLeg = l!;
+        _legLocked = true;
+      }
     }
     setState(() {});
   }
@@ -196,16 +204,20 @@ class _SignupScreenState extends State<SignupScreen> {
           );
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Account created successfully.')),
-      );
       ProfileProvider.of(context, listen: false)
           .updateFromMemberPayload(member);
+      final pid =
+          ProfileProvider.of(context, listen: false).data.partnerId.trim();
+      if (pid.isNotEmpty) {
+        await AddressStorageService.instance.migrateGuestToUser(pid);
+      }
       setState(() {
         _localPhoto = null;
         _localPhotoBytes = null;
         _localPhotoName = null;
       });
+      await _showAccountCreatedDialog(memberId: pid.isNotEmpty ? pid : '—');
+      if (!mounted) return;
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(builder: (_) => const HomeScreen()),
         (route) => false,
@@ -231,6 +243,155 @@ class _SignupScreenState extends State<SignupScreen> {
         setState(() => _isSubmitting = false);
       }
     }
+  }
+
+  Future<void> _showAccountCreatedDialog({required String memberId}) async {
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        final cs = Theme.of(context).colorScheme;
+        return Dialog(
+          insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final maxW = constraints.maxWidth.isFinite ? constraints.maxWidth : 400.0;
+              final width = maxW.clamp(280.0, 420.0);
+              return ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: width),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 58,
+                        height: 58,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: const Color(0xFF22C55E).withValues(alpha: 0.16),
+                        ),
+                        child: const Icon(
+                          Icons.check_rounded,
+                          color: Color(0xFF22C55E),
+                          size: 34,
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      Text(
+                        'Account Created Successfully!',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          color: cs.onSurface,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Congratulations! Your account has been created successfully.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 13.5,
+                          height: 1.35,
+                          color: cs.onSurface.withValues(alpha: 0.72),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: cs.primary.withValues(alpha: 0.35),
+                            width: 1.2,
+                          ),
+                          gradient: LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [
+                              cs.primary.withValues(alpha: 0.12),
+                              cs.primary.withValues(alpha: 0.04),
+                            ],
+                          ),
+                        ),
+                        child: Column(
+                          children: [
+                            Text(
+                              'Your Member ID:',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: cs.onSurface.withValues(alpha: 0.78),
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            SelectableText(
+                              memberId,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 0.3,
+                                color: cs.primary,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              'Please save this Member ID for future reference.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 12.5,
+                                height: 1.35,
+                                color: cs.onSurface.withValues(alpha: 0.68),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'You can now login and start using the app!',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 13.5,
+                          height: 1.35,
+                          color: cs.onSurface.withValues(alpha: 0.72),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 46,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: cs.primary,
+                            foregroundColor: cs.onPrimary,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                          ),
+                          onPressed: () => Navigator.of(context).pop(),
+                          child: const Text(
+                            'Continue to App',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 14.5,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        );
+      },
+    );
   }
 
   Future<void> _pickPhoto() async {
@@ -531,7 +692,9 @@ class _SignupScreenState extends State<SignupScreen> {
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        'Choose left or right binary leg. Defaults to LEFT.',
+                        _legLocked
+                            ? 'Placement leg is locked by your sponsor invite link.'
+                            : 'Choose left or right binary leg. Defaults to LEFT.',
                         style: TextStyle(
                           fontSize: 13,
                           color: _SignupLight.subtitle,
@@ -539,38 +702,44 @@ class _SignupScreenState extends State<SignupScreen> {
                         ),
                       ),
                       const SizedBox(height: 14),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _LegChoiceCard(
-                              label: 'LEFT',
-                              sub: _selectedLeg == 'LEFT'
-                                  ? 'Selected'
-                                  : 'Tap to select',
-                              icon: Icons
-                                  .keyboard_double_arrow_left_rounded,
-                              selected: _selectedLeg == 'LEFT',
-                              glow: _selectedLeg == 'LEFT',
-                              onTap: () =>
-                                  setState(() => _selectedLeg = 'LEFT'),
-                            ),
+                      AbsorbPointer(
+                        absorbing: _legLocked,
+                        child: Opacity(
+                          opacity: _legLocked ? 0.72 : 1,
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: _LegChoiceCard(
+                                  label: 'LEFT',
+                                  sub: _selectedLeg == 'LEFT'
+                                      ? 'Selected'
+                                      : 'Tap to select',
+                                  icon: Icons
+                                      .keyboard_double_arrow_left_rounded,
+                                  selected: _selectedLeg == 'LEFT',
+                                  glow: _selectedLeg == 'LEFT',
+                                  onTap: () =>
+                                      setState(() => _selectedLeg = 'LEFT'),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: _LegChoiceCard(
+                                  label: 'RIGHT',
+                                  sub: _selectedLeg == 'RIGHT'
+                                      ? 'Selected'
+                                      : 'Tap to select',
+                                  icon: Icons
+                                      .keyboard_double_arrow_right_rounded,
+                                  selected: _selectedLeg == 'RIGHT',
+                                  glow: _selectedLeg == 'RIGHT',
+                                  onTap: () =>
+                                      setState(() => _selectedLeg = 'RIGHT'),
+                                ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: _LegChoiceCard(
-                              label: 'RIGHT',
-                              sub: _selectedLeg == 'RIGHT'
-                                  ? 'Selected'
-                                  : 'Tap to select',
-                              icon:
-                                  Icons.keyboard_double_arrow_right_rounded,
-                              selected: _selectedLeg == 'RIGHT',
-                              glow: _selectedLeg == 'RIGHT',
-                              onTap: () =>
-                                  setState(() => _selectedLeg = 'RIGHT'),
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
                       const SizedBox(height: 22),
                       Row(

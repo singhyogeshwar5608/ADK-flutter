@@ -13,6 +13,7 @@ import '../models/category.dart';
 import '../models/member_summary.dart';
 import '../models/member_tree.dart';
 import '../models/product.dart';
+import '../config/api_config.dart';
 import '../models/delivery_center.dart';
 import '../models/hero_slide.dart';
 
@@ -102,15 +103,56 @@ class ApiClient {
     await _login();
   }
 
+  /// Restores [accessToken] from disk into memory. Never calls the API / [_login].
+  Future<void> restoreSessionFromStorage() async {
+    if (_accessToken != null) return;
+    await _loadTokenFromStorage();
+  }
+
+  /// Member token for requests that must use a **real** login (e.g. mock order).
+  /// Does not use the service-account [_login] fallback.
+  Future<String?> resolveStoredMemberToken() async {
+    await restoreSessionFromStorage();
+    if (_accessToken != null && _accessToken!.isNotEmpty) {
+      return _accessToken;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    for (final key in [
+      _accessTokenStorageKey,
+      'auth_token',
+      'netshop_access_token',
+      'token',
+    ]) {
+      final v = prefs.getString(key);
+      if (v != null && v.isNotEmpty) {
+        return v;
+      }
+    }
+    return null;
+  }
+
   Future<void> _loadTokenFromStorage() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString(_accessTokenStorageKey);
       final savedAtMs = prefs.getInt(_accessTokenSavedAtStorageKey);
-      if (savedAtMs == null) {
-        await _clearTokenFromStorage();
+
+      if (token == null || token.isEmpty) {
+        _accessToken = null;
         return;
       }
+
+      // Legacy installs: token without TTL key — keep session and start TTL now.
+      if (savedAtMs == null) {
+        await prefs.setInt(
+          _accessTokenSavedAtStorageKey,
+          DateTime.now().millisecondsSinceEpoch,
+        );
+        _accessToken = token;
+        print('Token loaded (legacy TTL): ${token.substring(0, 10)}...');
+        return;
+      }
+
       final savedAt = DateTime.fromMillisecondsSinceEpoch(savedAtMs);
       final age = DateTime.now().difference(savedAt);
       if (age >= _accessTokenTtl) {
@@ -118,10 +160,8 @@ class ApiClient {
         await _clearTokenFromStorage();
         return;
       }
-      if (token != null && token.isNotEmpty) {
-        _accessToken = token;
-        print('Token loaded from storage: ${token.substring(0, 10)}...');
-      }
+      _accessToken = token;
+      print('Token loaded from storage: ${token.substring(0, 10)}...');
     } catch (e) {
       print('Failed to load token from storage: $e');
     }
@@ -166,8 +206,17 @@ class ApiClient {
     final uri =
         _buildUri('products/public', {'limit': '$limit', 'page': '$page'});
     final response = await _httpClient
-        .get(uri, headers: const {'Content-Type': 'application/json'});
+        .get(uri, headers: ApiConfig.jsonHeaders);
     return _parseProductList(response, context: 'Fetch public products');
+  }
+
+  Future<Map<String, dynamic>?> fetchPincode(String pincode) async {
+    final normalized = pincode.trim();
+    final uri = _buildUri('pincode/$normalized');
+    final response = await _httpClient.get(uri, headers: ApiConfig.jsonHeaders);
+    _throwIfNeeded(response, context: 'Fetch pincode');
+    final decoded = jsonDecode(response.body);
+    return decoded is Map<String, dynamic> ? decoded : null;
   }
 
   Future<List<Product>> fetchWishlistProducts() async {
@@ -229,7 +278,7 @@ class ApiClient {
     };
     final uri = _buildUri('event-media', query);
     final response = await _httpClient
-        .get(uri, headers: const {'Content-Type': 'application/json'});
+        .get(uri, headers: ApiConfig.jsonHeaders);
     _throwIfNeeded(response, context: 'Fetch event media');
     final decoded = jsonDecode(response.body) as Map<String, dynamic>;
     return EventMediaResponse.fromJson(decoded);
@@ -242,7 +291,7 @@ class ApiClient {
       'page': '$page',
     });
     final response = await _httpClient
-        .get(uri, headers: const {'Content-Type': 'application/json'});
+        .get(uri, headers: ApiConfig.jsonHeaders);
     _throwIfNeeded(response, context: 'Fetch public categories');
     final decoded = jsonDecode(response.body) as Map<String, dynamic>;
     final data = decoded['data'] as List<dynamic>? ?? const [];
@@ -256,7 +305,7 @@ class ApiClient {
   Future<List<HeroSlide>> fetchActiveHeroSlides() async {
     final uri = _buildUri('hero-sliders/active');
     final response = await _httpClient
-        .get(uri, headers: const {'Content-Type': 'application/json'});
+        .get(uri, headers: ApiConfig.jsonHeaders);
     _throwIfNeeded(response, context: 'Fetch active hero slides');
     final decoded = jsonDecode(response.body);
     final List<dynamic> list;
@@ -291,7 +340,7 @@ class ApiClient {
     };
     final uri = _buildUri('admin/events', query);
     final response = await _httpClient
-        .get(uri, headers: const {'Content-Type': 'application/json'});
+        .get(uri, headers: ApiConfig.jsonHeaders);
     _throwIfNeeded(response, context: 'Fetch ADK events');
     final decoded = jsonDecode(response.body) as Map<String, dynamic>;
     return AdkEventResponse.fromJson(decoded);
@@ -306,7 +355,7 @@ class ApiClient {
     };
     final uri = _buildUri('catalogue', query);
     final response = await _httpClient
-        .get(uri, headers: const {'Content-Type': 'application/json'});
+        .get(uri, headers: ApiConfig.jsonHeaders);
     _throwIfNeeded(response, context: 'Fetch catalogue pages');
     final decoded = jsonDecode(response.body) as Map<String, dynamic>;
     return CataloguePageResponse.fromJson(decoded);
@@ -318,7 +367,7 @@ class ApiClient {
 
     try {
       final response = await _httpClient
-          .get(uri, headers: const {'Content-Type': 'application/json'});
+          .get(uri, headers: ApiConfig.jsonHeaders);
       print('Response status: ${response.statusCode}');
       print('Response body: ${response.body}');
 
@@ -338,16 +387,14 @@ class ApiClient {
   }
 
   Future<Map<String, dynamic>> fetchTeamStats() async {
+    await ensureAuthenticated();
     final uri = _buildUri('auth/team-stats');
     print('Fetching team stats from: $uri');
 
     try {
       final response = await _httpClient.get(
         uri,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $_accessToken',
-        },
+        headers: _authorizedHeaders(),
       );
       print('Team stats response status: ${response.statusCode}');
       print('Team stats response body: ${response.body}');
@@ -396,8 +443,8 @@ class ApiClient {
       throw StateError('Not authenticated');
     }
     return {
+      ...ApiConfig.jsonHeaders,
       'Authorization': 'Bearer $token',
-      'Content-Type': 'application/json',
     };
   }
 
@@ -436,7 +483,7 @@ class ApiClient {
     final uri = _buildUri('auth/login');
     final response = await _httpClient.post(
       uri,
-      headers: const {'Content-Type': 'application/json'},
+      headers: ApiConfig.jsonHeaders,
       body: jsonEncode({'email': _loginEmail, 'password': _loginPassword}),
     );
 
@@ -455,7 +502,7 @@ class ApiClient {
     final uri = _buildUri('auth/login');
     final response = await _httpClient.post(
       uri,
-      headers: const {'Content-Type': 'application/json'},
+      headers: ApiConfig.jsonHeaders,
       body: jsonEncode({
         'email': email.trim().toLowerCase(),
         'password': password,
@@ -539,6 +586,7 @@ class ApiClient {
     String? city,
     String? state,
     String? profileImage,
+    String? qrCodeUrl,
   }) async {
     await ensureAuthenticated();
     final payload = <String, dynamic>{
@@ -549,6 +597,7 @@ class ApiClient {
       if (city != null) 'city': city,
       if (state != null) 'state': state,
       if (profileImage != null) 'profileImage': profileImage,
+      if (qrCodeUrl != null) 'qrCodeUrl': qrCodeUrl,
     };
 
     final uri = _buildUri('profile');
@@ -628,7 +677,7 @@ class ApiClient {
     final uri = _buildUri('auth/register');
     final response = await _httpClient.post(
       uri,
-      headers: const {'Content-Type': 'application/json'},
+      headers: ApiConfig.jsonHeaders,
       body: jsonEncode(payload),
     );
 
@@ -795,13 +844,8 @@ class ApiClient {
       final uri = _buildUri('delivery-centers', query);
       print('Fetching delivery centers from: $uri');
 
-      final response = await _httpClient.get(
-        uri,
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-      );
+      final response =
+          await _httpClient.get(uri, headers: ApiConfig.jsonHeaders);
 
       print('Delivery centers response status: ${response.statusCode}');
       print('Delivery centers response body: ${response.body}');

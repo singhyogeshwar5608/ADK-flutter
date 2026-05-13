@@ -371,6 +371,8 @@ class _ProfileRewardsBvKycSection extends StatelessWidget {
         const _AadharKycCard(cardRadius: _cardRadius),
         const SizedBox(height: 16),
         const _PanKycCard(cardRadius: _cardRadius),
+        const SizedBox(height: 16),
+        const _ProfileQRCodeSection(),
         const SizedBox(height: 24),
         const _ProfileQuickActionsSection(),
         const SizedBox(height: 24),
@@ -390,6 +392,9 @@ class _FamilyTourRewardCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final profile = ProfileProvider.of(context).data;
+    final directIdsCount = profile.followers; // This contains the direct referrals count
+    
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -427,11 +432,80 @@ class _FamilyTourRewardCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Complete 30 direct IDs in 3 months to get Family Tour.',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+                          height: 1.45,
+                          fontSize: (theme.textTheme.bodySmall?.fontSize ?? 12) - 2,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: directIdsCount >= 30 
+                            ? const Color(0xFF10B981).withValues(alpha: 0.1)
+                            : const Color(0xFFF97316).withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: directIdsCount >= 30 
+                              ? const Color(0xFF10B981)
+                              : const Color(0xFFF97316),
+                          width: 1,
+                        ),
+                      ),
+                      child: Text(
+                        '$directIdsCount/30',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: directIdsCount >= 30 
+                              ? const Color(0xFF10B981)
+                              : const Color(0xFFF97316),
+                          fontSize: 11,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                // Progress bar
+                Container(
+                  height: 6,
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.outline.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                  child: FractionallySizedBox(
+                    alignment: Alignment.centerLeft,
+                    widthFactor: (directIdsCount / 30).clamp(0.0, 1.0),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: directIdsCount >= 30 
+                            ? const Color(0xFF10B981)
+                            : const Color(0xFFF97316),
+                        borderRadius: BorderRadius.circular(3),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 6),
                 Text(
-                  '3 months me 30 direct IDs complete karne par Family Tour milega.',
+                  directIdsCount >= 30 
+                      ? '🎉 Congratulations! You have completed the requirement!'
+                      : 'You have ${directIdsCount} direct IDs. Need ${30 - directIdsCount} more.',
                   style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
-                    height: 1.45,
+                    color: directIdsCount >= 30 
+                        ? const Color(0xFF10B981)
+                        : theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                    fontWeight: FontWeight.w500,
+                    height: 1.3,
+                    fontSize: (theme.textTheme.bodySmall?.fontSize ?? 12) - 2,
                   ),
                 ),
               ],
@@ -1716,7 +1790,7 @@ class _LegSelectorTile extends StatelessWidget {
 class _SupportAssistanceCard extends StatelessWidget {
   const _SupportAssistanceCard();
 
-  static const _supportPhone = '9990299904';
+  static const _supportPhone = '8307599904';
 
   @override
   Widget build(BuildContext context) {
@@ -2092,6 +2166,165 @@ class _HeaderIconButton extends StatelessWidget {
         padding: EdgeInsets.zero,
       ),
       icon: Icon(icon, size: 20),
+    );
+  }
+}
+
+class _ProfileQRCodeSection extends StatelessWidget {
+  const _ProfileQRCodeSection();
+
+  Future<void> _pickAndUpload(BuildContext context) async {
+    final profileState = ProfileProvider.of(context, listen: false);
+    final picker = ImagePicker();
+    final image = await picker.pickImage(source: ImageSource.gallery);
+    if (image == null) return;
+
+    // Show loading
+    if (!context.mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+
+    try {
+      final bytes = await image.readAsBytes();
+      final uploadResult = await CloudinaryService.instance.uploadImage(
+        bytes: bytes,
+        filename: image.name,
+      );
+      await profileState.updateQrCode(uploadResult.url);
+      if (context.mounted) Navigator.pop(context); // Close loading
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('QR Code updated successfully')),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) Navigator.pop(context); // Close loading
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to upload QR Code: $e')),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final profile = ProfileProvider.of(context).data;
+    final qrCodeUrl = profile.qrCodeUrl;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 20),
+      decoration: BoxDecoration(
+        color: _surfaceColor(context),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: _cardBorderColor(context)),
+        boxShadow: _softShadow(context),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: qrCodeUrl == null ? () => _pickAndUpload(context) : null,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(
+                      Icons.qr_code_2_rounded,
+                      size: 20,
+                      color: theme.colorScheme.primary,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Payment QR Code',
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w800,
+                            color: theme.colorScheme.onSurface,
+                          ),
+                        ),
+                        Text(
+                          qrCodeUrl != null
+                              ? 'Tap to update your payment QR'
+                              : 'Upload for easier payments',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurface
+                                .withValues(alpha: 0.5),
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (qrCodeUrl != null)
+                    IconButton.filledTonal(
+                      onPressed: () => _pickAndUpload(context),
+                      icon: const Icon(Icons.sync_rounded, size: 18),
+                      style: IconButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    ),
+                ],
+              ),
+              if (qrCodeUrl != null) ...[
+                const SizedBox(height: 16),
+                Center(
+                  child: Container(
+                    width: 120,
+                    height: 120,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                        width: 2,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.05),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(14),
+                      child: Image.network(
+                        qrCodeUrl,
+                        fit: BoxFit.cover,
+                        loadingBuilder: (context, child, progress) {
+                          if (progress == null) return child;
+                          return const Center(
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          );
+                        },
+                        errorBuilder: (context, error, stack) => const Center(
+                          child: Icon(Icons.broken_image_outlined,
+                              color: Colors.red),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

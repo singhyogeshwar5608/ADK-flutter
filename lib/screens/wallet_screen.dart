@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../state/profile_state.dart';
-import '../widgets/bv_transactions_panel.dart';
 import 'all_products_screen.dart';
 import 'cart_screen.dart';
 import 'profile_screen.dart';
@@ -236,7 +235,6 @@ class _WalletBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 20),
       child: Column(
@@ -245,14 +243,6 @@ class _WalletBody extends StatelessWidget {
           const _WalletHeroCard(),
           const SizedBox(height: 12),
           const _WalletStatsRow(),
-          const SizedBox(height: 20),
-          Text(
-            'Transaction history',
-            style: theme.textTheme.titleSmall
-                ?.copyWith(fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 8),
-          const BVTransactionsPanel(embeddedInWallet: true),
         ],
       ),
     );

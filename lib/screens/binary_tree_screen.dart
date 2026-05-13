@@ -726,6 +726,7 @@ void _openMemberDetail(BuildContext context, MemberNode node) {
       joinedAgo: joinedAgo,
       growth: 0.18,
       focusAreas: const ['Growth', 'Training'],
+      qrCodeUrl: node.qrCodeUrl,
     ),
   );
 }

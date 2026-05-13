@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../models/stored_address.dart';
 import '../navigation/checkout_arguments.dart';
+import '../services/address_storage_service.dart';
+import '../state/profile_state.dart';
 import 'all_products_screen.dart';
 import 'profile_screen.dart';
 import 'wallet_screen.dart';
@@ -59,9 +62,11 @@ class _NavItem extends StatelessWidget {
 
 class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
   final _formKey = GlobalKey<FormState>();
+  List<StoredAddress> _savedAddresses = [];
 
   final _fullNameCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
+  final _emailCtrl = TextEditingController();
   final _stateCtrl = TextEditingController();
   final _cityCtrl = TextEditingController();
   final _zipCtrl = TextEditingController();
@@ -71,20 +76,84 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
   bool _isFormComplete = false;
   dynamic _originalArguments;
 
+  /// Visitors (no member id) must provide email for guest order APIs.
+  bool _guestBuyer = true;
+
+  List<TextEditingController> get _allFields => [
+        _fullNameCtrl,
+        _phoneCtrl,
+        _emailCtrl,
+        _stateCtrl,
+        _cityCtrl,
+        _zipCtrl,
+        _address1Ctrl,
+        _address2Ctrl,
+      ];
+
   @override
   void initState() {
     super.initState();
 
-    // Add listeners
-    for (final controller in _requiredControllers) {
+    for (final controller in _allFields) {
       controller.addListener(_updateFormCompletionState);
     }
     _updateFormCompletionState();
+    WidgetsBinding.instance
+        .addPostFrameCallback((_) => _maybePrefillFromStorage());
+    WidgetsBinding.instance
+        .addPostFrameCallback((_) => _loadSavedAddresses());
+  }
+
+  Future<void> _loadSavedAddresses() async {
+    if (!mounted) return;
+    final profile = ProfileProvider.of(context, listen: false).data;
+    final uid =
+        profile.partnerId.trim().isEmpty ? null : profile.partnerId.trim();
+    final list = await AddressStorageService.instance.listForUserId(uid);
+    if (!mounted) return;
+    setState(() => _savedAddresses = list);
+  }
+
+  Future<void> _maybePrefillFromStorage() async {
+    if (!mounted) return;
+    final args = ModalRoute.of(context)?.settings.arguments;
+    if (args is ShippingDetailsPayload) return;
+
+    if (_fullNameCtrl.text.trim().isNotEmpty) return;
+
+    final profile = ProfileProvider.of(context, listen: false).data;
+    final uid =
+        profile.partnerId.trim().isEmpty ? null : profile.partnerId.trim();
+    final list = await AddressStorageService.instance.listForUserId(uid);
+    if (!mounted || list.isEmpty) return;
+
+    final p =
+        AddressStorageService.instance.pickPrimaryForCheckout(list).toShippingDetailsPayload();
+    setState(() {
+      _fullNameCtrl.text = p.fullName;
+      _phoneCtrl.text = p.primaryPhone;
+      if ((p.email ?? '').trim().isNotEmpty) {
+        _emailCtrl.text = p.email!.trim();
+      }
+      _stateCtrl.text = p.state;
+      _cityCtrl.text = p.city;
+      _zipCtrl.text = p.zipCode;
+      _address1Ctrl.text = p.shippingAddress;
+      if (p.billingAddress != null && _address2Ctrl.text.trim().isEmpty) {
+        _address2Ctrl.text = p.billingAddress!;
+      }
+    });
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+
+    final partnerId = ProfileProvider.of(context).data.partnerId.trim();
+    final guest = partnerId.isEmpty;
+    if (_guestBuyer != guest) {
+      setState(() => _guestBuyer = guest);
+    }
 
     // Store the original arguments
     _originalArguments = ModalRoute.of(context)?.settings.arguments;
@@ -99,6 +168,9 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
       final shippingDetails = args;
       _fullNameCtrl.text = shippingDetails.fullName;
       _phoneCtrl.text = shippingDetails.primaryPhone;
+      if ((shippingDetails.email ?? '').trim().isNotEmpty) {
+        _emailCtrl.text = shippingDetails.email!.trim();
+      }
       _stateCtrl.text = shippingDetails.state;
       _cityCtrl.text = shippingDetails.city;
       _zipCtrl.text = shippingDetails.zipCode;
@@ -113,10 +185,11 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
   void dispose() {
     _fullNameCtrl.dispose();
     _phoneCtrl.dispose();
+    _emailCtrl.dispose();
     _stateCtrl.dispose();
     _cityCtrl.dispose();
     _zipCtrl.dispose();
-    for (final controller in _requiredControllers) {
+    for (final controller in _allFields) {
       controller.removeListener(_updateFormCompletionState);
     }
     _address1Ctrl.dispose();
@@ -124,18 +197,18 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
     super.dispose();
   }
 
-  List<TextEditingController> get _requiredControllers => [
-        _fullNameCtrl,
-        _phoneCtrl,
-        _stateCtrl,
-        _cityCtrl,
-        _zipCtrl,
-        _address1Ctrl,
-      ];
-
   void _updateFormCompletionState() {
-    final allFilled = _requiredControllers
-        .every((controller) => controller.text.trim().isNotEmpty);
+    final requiredCtrls = [
+      _fullNameCtrl,
+      _phoneCtrl,
+      _stateCtrl,
+      _cityCtrl,
+      _zipCtrl,
+      _address1Ctrl,
+      if (_guestBuyer) _emailCtrl,
+    ];
+    final allFilled =
+        requiredCtrls.every((controller) => controller.text.trim().isNotEmpty);
     final nextValue = allFilled;
     if (nextValue != _isFormComplete) {
       setState(() => _isFormComplete = nextValue);
@@ -143,6 +216,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
   }
 
   ShippingDetailsPayload _buildPayload() {
+    final emailTrimmed = _emailCtrl.text.trim();
     return ShippingDetailsPayload(
       fullName: _fullNameCtrl.text.trim(),
       primaryPhone: _phoneCtrl.text.trim(),
@@ -154,34 +228,53 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
       billingAddress: _address2Ctrl.text.trim().isNotEmpty
           ? _address2Ctrl.text.trim()
           : null,
+      email: _guestBuyer && emailTrimmed.isNotEmpty ? emailTrimmed : null,
     );
   }
 
-  void _handleContinue() {
+  void _selectAddress(StoredAddress address) {
+    setState(() {
+      _fullNameCtrl.text = address.name.trim();
+      _phoneCtrl.text = address.phone.trim();
+      _emailCtrl.text = address.email?.trim() ?? '';
+      _stateCtrl.text = address.state.trim();
+      _cityCtrl.text = address.city.trim();
+      _zipCtrl.text = address.pincode.trim();
+      _address1Ctrl.text = address.addressLine.trim();
+      _address2Ctrl.text = ''; // billingAddress not available in StoredAddress
+    });
+  }
+
+  Future<void> _handleContinue() async {
     if (_formKey.currentState?.validate() != true) return;
 
+    final profile = ProfileProvider.of(context, listen: false).data;
+    final uid =
+        profile.partnerId.trim().isEmpty ? null : profile.partnerId.trim();
+    final shippingPayload = _buildPayload();
+    await AddressStorageService.instance
+        .upsertFromShippingDetails(shippingPayload, userId: uid);
+    await AddressStorageService.instance
+        .writeCheckoutShippingOverride(shippingPayload);
+    if (!mounted) return;
     debugPrint(
         'CustomerDetails: Original arguments type: ${_originalArguments.runtimeType}');
     debugPrint('CustomerDetails: Original arguments: $_originalArguments');
 
     // Check if this is a direct purchase
     if (_originalArguments is CheckoutArguments) {
-      // For direct purchase, pass both CheckoutArguments and ShippingDetailsPayload
       final checkoutArgs = _originalArguments as CheckoutArguments;
-      final shippingPayload = _buildPayload();
 
       debugPrint(
           'CustomerDetails: Direct purchase detected - product: ${checkoutArgs.product.title}, price: ${checkoutArgs.product.price}');
 
-      // Create a combined payload that includes both
       Navigator.of(context).pushNamed('/checkout', arguments: {
         'directPurchase': checkoutArgs,
         'shippingDetails': shippingPayload,
       });
     } else {
-      // For cart purchase, pass only shipping details
       debugPrint('CustomerDetails: Cart purchase detected');
-      Navigator.of(context).pushNamed('/checkout', arguments: _buildPayload());
+      Navigator.of(context).pushNamed('/checkout', arguments: shippingPayload);
     }
   }
 
@@ -192,29 +285,143 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
     return null;
   }
 
-  InputDecoration _decoration(BuildContext context, String placeholder,
-      {int? maxLines}) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final baseBorder = OutlineInputBorder(
-      borderRadius: BorderRadius.circular(16),
-      borderSide: BorderSide(
-        color: isDark ? const Color(0xFF273548) : const Color(0xFFE2E8F0),
-      ),
-    );
+  String? _guestEmailValidator(String? v) {
+    if (!_guestBuyer) return null;
+    if (v == null || v.trim().isEmpty) {
+      return 'Email is required for guest checkout';
+    }
+    final t = v.trim();
+    if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(t)) {
+      return 'Enter a valid email address';
+    }
+    return null;
+  }
+
+  static const double _fieldRadius = 12;
+
+  /// Base body size from theme, minus 3px for both input and hint (per spec).
+  double _inputFontSize(ThemeData theme) {
+    final base = theme.textTheme.bodyLarge?.fontSize ?? 15;
+    return (base - 3).clamp(11.0, 18.0);
+  }
+
+  InputDecoration _decoration(
+    BuildContext context,
+    String placeholder, {
+    int? maxLines,
+    required double inputFontSize,
+    required bool isDark,
+  }) {
+    final theme = Theme.of(context);
+    final primary = theme.colorScheme.primary;
+    final hintFontSize = inputFontSize;
+    final muted = isDark
+        ? const Color(0xFF94A3B8)
+        : const Color(0xFF64748B);
+    final idleColor =
+        isDark ? const Color(0xFF273548) : const Color(0xFFE2E8F0);
+
+    OutlineInputBorder outline(Color color, [double width = 1]) {
+      return OutlineInputBorder(
+        borderRadius: BorderRadius.circular(_fieldRadius),
+        borderSide: BorderSide(color: color, width: width),
+      );
+    }
 
     return InputDecoration(
+      isDense: true,
       hintText: placeholder,
+      hintStyle: TextStyle(
+        fontSize: hintFontSize,
+        fontWeight: FontWeight.w400,
+        color: muted.withValues(alpha: 0.88),
+      ),
       filled: true,
-      fillColor: isDark ? const Color(0xFF0F1724) : const Color(0xFFF8FAFC),
-      border: baseBorder,
-      enabledBorder: baseBorder,
-      focusedBorder: baseBorder.copyWith(
-        borderSide: BorderSide(
-            color: Theme.of(context).colorScheme.primary, width: 1.4),
+      fillColor: Colors.transparent,
+      border: outline(idleColor),
+      enabledBorder: outline(idleColor),
+      focusedBorder: outline(primary, 1.35),
+      errorBorder: outline(Colors.red.shade400),
+      focusedErrorBorder: outline(Colors.red.shade300, 1.15),
+      errorStyle: TextStyle(
+        fontSize: (hintFontSize - 1).clamp(10.0, 14.0),
+        height: 1.2,
+        color: Colors.red.shade700,
       ),
       contentPadding: EdgeInsets.symmetric(
-        horizontal: 18,
-        vertical: (maxLines != null && maxLines > 1) ? 16 : 14,
+        horizontal: 14,
+        vertical: (maxLines != null && maxLines > 1) ? 11 : 9,
+      ),
+    );
+  }
+
+  /// Soft shadow (light) / inset panel (dark) behind the field.
+  Widget _fieldShell(BuildContext context, {required Widget child}) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    if (isDark) {
+      return DecoratedBox(
+        decoration: BoxDecoration(
+          color: const Color(0xFF0F1724),
+          borderRadius: BorderRadius.circular(_fieldRadius),
+        ),
+        child: child,
+      );
+    }
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(_fieldRadius),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF0F172A).withValues(alpha: 0.07),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(_fieldRadius),
+        child: ColoredBox(color: Colors.white, child: child),
+      ),
+    );
+  }
+
+  Widget _shippingField(
+    BuildContext context, {
+    required TextEditingController controller,
+    required String placeholder,
+    String? Function(String?)? validator,
+    TextInputType? keyboardType,
+    List<TextInputFormatter>? inputFormatters,
+    TextCapitalization textCapitalization = TextCapitalization.none,
+    int? maxLines,
+  }) {
+    final theme = Theme.of(context);
+    final inputSize = _inputFontSize(theme);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return _fieldShell(
+      context,
+      child: TextFormField(
+        controller: controller,
+        keyboardType: keyboardType,
+        inputFormatters: inputFormatters,
+        textCapitalization: textCapitalization,
+        maxLines: maxLines ?? 1,
+        style: TextStyle(
+          fontSize: inputSize,
+          fontWeight: FontWeight.w500,
+          height: 1.25,
+          color: theme.colorScheme.onSurface,
+        ),
+        cursorColor: theme.colorScheme.primary,
+        decoration: _decoration(
+          context,
+          placeholder,
+          maxLines: maxLines,
+          inputFontSize: inputSize,
+          isDark: isDark,
+        ),
+        validator: validator,
       ),
     );
   }
@@ -252,22 +459,71 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    TextFormField(
+                    if (_savedAddresses.isNotEmpty) ...[
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.surface,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: Theme.of(context).dividerColor.withValues(alpha: 0.3),
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Select Saved Address',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: _savedAddresses.map((address) => InkWell(
+                                onTap: () => _selectAddress(address),
+                                borderRadius: BorderRadius.circular(8),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF2B9DEE).withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color: const Color(0xFF2B9DEE).withValues(alpha: 0.3),
+                                    ),
+                                  ),
+                                  child: Text(
+                                    address.name.trim().isEmpty ? 'Address ${_savedAddresses.indexOf(address) + 1}' : address.name.trim(),
+                                    style: const TextStyle(fontSize: 11, color: Color(0xFF2B9DEE)),
+                                  ),
+                                ),
+                              )).toList(),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+                    _shippingField(
+                      context,
                       controller: _fullNameCtrl,
+                      placeholder: 'Full name',
                       textCapitalization: TextCapitalization.words,
-                      decoration: _decoration(context, 'Full name'),
                       validator: (v) => _required(v, 'Full name'),
                     ),
-                    const SizedBox(height: 10),
-                    TextFormField(
+                    const SizedBox(height: 12),
+                    _shippingField(
+                      context,
                       controller: _phoneCtrl,
+                      placeholder: 'Primary phone number',
                       keyboardType: TextInputType.phone,
                       inputFormatters: [
                         FilteringTextInputFormatter.digitsOnly,
-                        LengthLimitingTextInputFormatter(
-                            10), // Limit to 10 digits
+                        LengthLimitingTextInputFormatter(10),
                       ],
-                      decoration: _decoration(context, 'Primary phone number'),
                       validator: (v) {
                         if (v == null || v.trim().isEmpty) {
                           return 'Phone number is required';
@@ -278,38 +534,64 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                         return null;
                       },
                     ),
-                    const SizedBox(height: 10),
-                    TextFormField(
+                    if (_guestBuyer) ...[
+                      const SizedBox(height: 12),
+                      _shippingField(
+                        context,
+                        controller: _emailCtrl,
+                        placeholder: 'Email (order updates)',
+                        keyboardType: TextInputType.emailAddress,
+                        textCapitalization: TextCapitalization.none,
+                        validator: _guestEmailValidator,
+                      ),
+                    ],
+                    const SizedBox(height: 12),
+                    _shippingField(
+                      context,
                       controller: _stateCtrl,
+                      placeholder: 'State / Province',
                       textCapitalization: TextCapitalization.words,
-                      decoration: _decoration(context, 'State / Province'),
                       validator: (v) => _required(v, 'State / Province'),
                     ),
-                    const SizedBox(height: 10),
-                    TextFormField(
-                      controller: _cityCtrl,
-                      textCapitalization: TextCapitalization.words,
-                      decoration: _decoration(context, 'City'),
-                      validator: (v) => _required(v, 'City'),
+                    const SizedBox(height: 12),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          flex: 11,
+                          child: _shippingField(
+                            context,
+                            controller: _cityCtrl,
+                            placeholder: 'City',
+                            textCapitalization: TextCapitalization.words,
+                            validator: (v) => _required(v, 'City'),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          flex: 9,
+                          child: _shippingField(
+                            context,
+                            controller: _zipCtrl,
+                            placeholder: 'ZIP / Postal code',
+                            keyboardType: TextInputType.text,
+                            validator: (v) => _required(v, 'ZIP / Postal code'),
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 10),
-                    TextFormField(
-                      controller: _zipCtrl,
-                      keyboardType: TextInputType.text,
-                      decoration: _decoration(context, 'ZIP / Postal code'),
-                      validator: (v) => _required(v, 'ZIP / Postal code'),
-                    ),
-                    const SizedBox(height: 10),
-                    TextFormField(
+                    const SizedBox(height: 12),
+                    _shippingField(
+                      context,
                       controller: _address1Ctrl,
-                      decoration: _decoration(context, 'Address line 1'),
+                      placeholder: 'Address line 1',
                       validator: (v) => _required(v, 'Address line 1'),
                     ),
-                    const SizedBox(height: 10),
-                    TextFormField(
+                    const SizedBox(height: 12),
+                    _shippingField(
+                      context,
                       controller: _address2Ctrl,
-                      decoration:
-                          _decoration(context, 'Address line 2 (optional)'),
+                      placeholder: 'Address line 2 (optional)',
                     ),
                   ],
                 ),
