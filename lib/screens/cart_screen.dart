@@ -28,7 +28,9 @@ class CartScreen extends StatelessWidget {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
+
     final cart = CartProvider.of(context);
+    final items = cart.items;
 
     return Scaffold(
       backgroundColor:
@@ -83,18 +85,16 @@ class CartScreen extends StatelessWidget {
                                   _PricingSummary(
                                     theme: theme,
                                     colorScheme: colorScheme,
-                                    selectedSubtotal: cart.selectedSubtotal,
-                                    selectedTax: cart.selectedTax,
-                                    selectedShippingTotal:
-                                        cart.selectedShippingTotal,
-                                    selectedTotal: cart.selectedTotal,
+                                    selectedSubtotal: cart.selectedSubtotal(),
+                                    selectedTax: cart.selectedTax(),
+                                    selectedTotal: cart.selectedTotal(),
                                     selectedItemsCount:
                                         cart.selectedItemsCount,
                                     totalItems: cart.totalItems,
                                     allItemsSelected: cart.allItemsSelected,
                                     onSelectAll: cart.selectAll,
                                     onDeselectAll: cart.deselectAll,
-                                    selectedTotalGst: cart.selectedTotalGst,
+                                    selectedTotalGst: cart.selectedTotalGst(),
                                     cart: cart,
                                   ),
                                 ],
@@ -108,7 +108,7 @@ class CartScreen extends StatelessWidget {
                   _Footer(
                     colorScheme: colorScheme,
                     theme: theme,
-                    payableTotal: cart.selectedTotal,
+                    payableTotal: cart.selectedTotal(),
                     selectedItemsCount: cart.selectedItemsCount,
                   ),
                 ],
@@ -538,7 +538,7 @@ class _CartItemCard extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Price: ₹${item.product.price.toStringAsFixed(2)} × ${item.quantity}',
+                              'Price: ₹${item.unitPrice().toStringAsFixed(2)} × ${item.quantity}',
                               style: priceStyle,
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
@@ -860,7 +860,6 @@ class _PricingSummary extends StatelessWidget {
     required this.colorScheme,
     required this.selectedSubtotal,
     required this.selectedTax,
-    required this.selectedShippingTotal,
     required this.selectedTotal,
     required this.selectedItemsCount,
     required this.totalItems,
@@ -875,7 +874,6 @@ class _PricingSummary extends StatelessWidget {
   final ColorScheme colorScheme;
   final double selectedSubtotal;
   final double selectedTax;
-  final double selectedShippingTotal;
   final double selectedTotal;
   final int selectedItemsCount;
   final int totalItems;
@@ -977,13 +975,7 @@ class _PricingSummary extends StatelessWidget {
           ),
           child: Column(
             children: [
-              row('Subtotal (selected)', format(selectedSubtotal)),
-              row('Shipping', format(selectedShippingTotal)),
-              Divider(
-                  height: 16,
-                  thickness: 1,
-                  color: divider.withValues(alpha: 0.45)),
-              row('Estimated total', format(selectedTotal),
+              row('Total', format(selectedTotal),
                   valueColor: colorScheme.primary, bold: true),
               const SizedBox(height: 12),
               Container(
@@ -1007,7 +999,7 @@ class _PricingSummary extends StatelessWidget {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'All prices include GST and applicable taxes',
+                        'GST will be calculated based on your shipping address at checkout',
                         style: theme.textTheme.bodySmall?.copyWith(
                           fontSize: 10,
                           fontWeight: FontWeight.w700,

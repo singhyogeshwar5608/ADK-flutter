@@ -13,6 +13,7 @@ class StoredAddress {
     required this.addressLine,
     required this.city,
     required this.state,
+    this.country = 'India',
     required this.pincode,
     this.isDefault = false,
     this.lastUsedAt = 0,
@@ -25,6 +26,7 @@ class StoredAddress {
   final String addressLine;
   final String city;
   final String state;
+  final String country;
   final String pincode;
   final bool isDefault;
 
@@ -39,6 +41,7 @@ class StoredAddress {
         'addressLine': addressLine,
         'city': city,
         'state': state,
+        'country': country,
         'pincode': pincode,
         'isDefault': isDefault,
         'lastUsedAt': lastUsedAt,
@@ -57,6 +60,7 @@ class StoredAddress {
           .toString(),
       city: (json['city'] ?? '').toString(),
       state: (json['state'] ?? '').toString(),
+      country: (json['country'] ?? 'India').toString(),
       pincode: (json['pincode'] ?? json['zip'] ?? '').toString(),
       isDefault: json['isDefault'] == true || json['is_default'] == true,
       lastUsedAt: lu is int ? lu : int.tryParse('$lu') ?? 0,
@@ -71,6 +75,7 @@ class StoredAddress {
     String? addressLine,
     String? city,
     String? state,
+    String? country,
     String? pincode,
     bool? isDefault,
     int? lastUsedAt,
@@ -83,6 +88,7 @@ class StoredAddress {
       addressLine: addressLine ?? this.addressLine,
       city: city ?? this.city,
       state: state ?? this.state,
+      country: country ?? this.country,
       pincode: pincode ?? this.pincode,
       isDefault: isDefault ?? this.isDefault,
       lastUsedAt: lastUsedAt ?? this.lastUsedAt,
@@ -103,6 +109,7 @@ class StoredAddress {
       addressLine: p.shippingAddress.trim(),
       city: p.city.trim(),
       state: p.state.trim(),
+      country: p.country.trim(),
       pincode: p.zipCode.trim(),
       isDefault: isDefault,
       lastUsedAt: lastUsedAt,
@@ -115,6 +122,7 @@ class StoredAddress {
       fullName: name.trim(),
       primaryPhone: phone.trim(),
       secondaryPhone: null,
+      country: country.trim(),
       state: state.trim(),
       city: city.trim(),
       zipCode: pincode.trim(),

@@ -16,6 +16,7 @@ import '../models/product.dart';
 import '../config/api_config.dart';
 import '../models/delivery_center.dart';
 import '../models/hero_slide.dart';
+import '../models/social_link.dart';
 
 class CataloguePageResponse {
   const CataloguePageResponse({required this.data, required this.meta});
@@ -282,6 +283,61 @@ class ApiClient {
     _throwIfNeeded(response, context: 'Fetch event media');
     final decoded = jsonDecode(response.body) as Map<String, dynamic>;
     return EventMediaResponse.fromJson(decoded);
+  }
+
+  Future<List<SocialLink>> fetchSocialLinks() async {
+    try {
+      // Try both common naming conventions
+      final endpoints = ['social_links', 'social-links', 'settings/social-links'];
+      
+      for (final endpoint in endpoints) {
+        final uri = _buildUri(endpoint);
+        debugPrint('Trying to fetch social links from: $uri');
+        final response = await _httpClient.get(uri, headers: ApiConfig.jsonHeaders);
+        
+        if (response.statusCode == 200) {
+          debugPrint('Successfully fetched social links from $endpoint');
+          return _parseSocialLinks(response.body);
+        }
+      }
+      
+      debugPrint('All social links endpoints failed');
+      return [];
+    } catch (e) {
+      debugPrint('Error fetching social links: $e');
+      return [];
+    }
+  }
+
+  List<SocialLink> _parseSocialLinks(String responseBody) {
+    try {
+      final decoded = jsonDecode(responseBody);
+      List<dynamic> list = [];
+      
+      if (decoded is List<dynamic>) {
+        list = decoded;
+      } else if (decoded is Map<String, dynamic>) {
+        // Handle different common wrapping keys
+        final data = decoded['data'] ?? decoded['social_links'] ?? decoded['links'] ?? decoded['results'];
+        if (data is List<dynamic>) {
+          list = data;
+        } else if (decoded.containsKey('id') && decoded.containsKey('platform')) {
+          // It's a single object, wrap it
+          list = [decoded];
+        }
+      }
+      
+      final links = list
+          .whereType<Map<String, dynamic>>()
+          .map(SocialLink.fromJson)
+          .toList(growable: false);
+          
+      debugPrint('Parsed ${links.length} social links');
+      return links;
+    } catch (e) {
+      debugPrint('Error parsing social links: $e');
+      return [];
+    }
   }
 
   Future<List<Category>> fetchPublicCategories(

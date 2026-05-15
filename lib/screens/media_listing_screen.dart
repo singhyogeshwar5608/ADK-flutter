@@ -1,9 +1,13 @@
 import 'dart:async';
+import 'dart:ui';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:video_player/video_player.dart';
 
 import '../models/event_media_item.dart';
+import '../models/social_link.dart';
 import '../services/api_client.dart';
 import '../widgets/social_media_links_bar.dart';
 
@@ -21,6 +25,7 @@ class _MediaListingScreenState extends State<MediaListingScreen> {
   final ApiClient _apiClient = ApiClient.instance;
 
   List<EventMediaItem> _rawItems = const [];
+  List<SocialLink> _socialLinks = const [];
   PaginationMeta? _meta;
   String _searchQuery = '';
   Set<String> _selectedCategories = {};
@@ -45,19 +50,48 @@ class _MediaListingScreenState extends State<MediaListingScreen> {
     super.dispose();
   }
 
-  List<EventMediaItem> get _filteredItems {
-    final query = _searchQuery.toLowerCase();
-    return _rawItems.where((item) {
-      final matchesSearch =
-          query.isEmpty || item.title.toLowerCase().contains(query);
-      final matchesCategory = _selectedCategories.isEmpty ||
-          _selectedCategories.contains(item.categoryLabel);
-      return matchesSearch && matchesCategory;
-    }).toList();
+  List<dynamic> get _allFilteredItems {
+    try {
+      final query = _searchQuery.toLowerCase();
+      
+      debugPrint('Filtering items: mediaCount=${_rawItems.length}, socialCount=${_socialLinks.length}');
+
+      final filteredMedia = _rawItems.where((item) {
+        // Show if it's a video OR if it has a video-like category
+        final isVideo = item.isVideo;
+        if (!isVideo) return false;
+
+        final matchesSearch =
+            query.isEmpty || item.title.toLowerCase().contains(query);
+        final matchesCategory = _selectedCategories.isEmpty ||
+            _selectedCategories.contains(item.categoryLabel);
+        return matchesSearch && matchesCategory;
+      }).toList();
+
+      final filteredSocial = _socialLinks.where((link) {
+        // Show if it has any URL
+        final hasUrl = link.link.trim().isNotEmpty;
+        if (!hasUrl) return false;
+
+        final matchesSearch = query.isEmpty ||
+            (link.title?.toLowerCase().contains(query) ?? false) ||
+            link.platform.toLowerCase().contains(query);
+        return matchesSearch;
+      }).toList();
+
+      final all = [...filteredSocial, ...filteredMedia];
+      debugPrint('Final filtered count: ${all.length}');
+      return all;
+    } catch (e, st) {
+      debugPrint('Error in _allFilteredItems: $e');
+      debugPrint('$st');
+      return [];
+    }
   }
 
   Set<String> get _availableCategories {
     final derived = _rawItems
+        .where((item) => item.isVideo)
         .map((item) => item.categoryLabel.trim())
         .where((value) => value.isNotEmpty)
         .toSet();
@@ -96,18 +130,38 @@ class _MediaListingScreenState extends State<MediaListingScreen> {
     }
 
     try {
-      final response = await _apiClient.fetchEventMedia(
+      // Load both in parallel but handle them as they come
+      _apiClient.fetchEventMedia(
         page: 1,
         limit: 50,
         search: _searchQuery.isEmpty ? null : _searchQuery,
         sort: 'recent',
-      );
-      if (!mounted) return;
-      setState(() {
-        _rawItems = response.items;
-        _meta = response.meta;
-        _isLoading = false;
+      ).then((mediaResponse) {
+        if (!mounted) return;
+        setState(() {
+          _rawItems = mediaResponse.items;
+          _meta = mediaResponse.meta;
+          // If social links are also done (or not needed), stop loading
+          if (_socialLinks.isNotEmpty || _isLoading == false) {
+             _isLoading = false;
+          }
+        });
+      }).catchError((error) {
+        debugPrint('Media fetch error: $error');
       });
+
+      _apiClient.fetchSocialLinks().then((socialLinks) {
+        if (!mounted) return;
+        setState(() {
+          _socialLinks = socialLinks;
+          _isLoading = false; // Social links are usually faster/smaller
+        });
+      }).catchError((error) {
+        debugPrint('Social links fetch error: $error');
+        if (!mounted) return;
+        setState(() => _isLoading = false);
+      });
+
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -256,17 +310,25 @@ class _MediaListingScreenState extends State<MediaListingScreen> {
   }
 
   void _openMediaPreview(EventMediaItem item) {
-    showDialog(
-      context: context,
-      barrierDismissible: true,
-      builder: (_) => _MediaPreviewDialog(item: item),
-    );
+    _launchUrl(item.fileUrl);
+  }
+
+  Future<void> _launchUrl(String url) async {
+    final uri = Uri.tryParse(url);
+    if (uri == null) return;
+    try {
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      }
+    } catch (e) {
+      debugPrint('Could not launch $url: $e');
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final items = _filteredItems;
-    final totalCount = _meta?.total ?? _rawItems.length;
+    final items = _allFilteredItems;
+    final totalCount = items.length;
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -366,16 +428,36 @@ class _MediaListingScreenState extends State<MediaListingScreen> {
                             ),
                           ),
                         )
-                      : RefreshIndicator(
-                          onRefresh: () => _loadMedia(initial: true),
-                          child: ListView.builder(
+                      : items.isEmpty
+                          ? Center(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.video_library_outlined,
+                                      size: 48, color: Colors.grey.shade300),
+                                  const SizedBox(height: 16),
+                                  const Text('No videos found',
+                                      style: TextStyle(
+                                          color: Colors.black54, fontSize: 16)),
+                                ],
+                              ),
+                            )
+                          : RefreshIndicator(
+                              onRefresh: () => _loadMedia(initial: true),
+                              child: ListView.builder(
                             physics: const AlwaysScrollableScrollPhysics(),
                             padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
                             itemCount: items.length,
                             itemBuilder: (context, index) {
                               final item = items[index];
+                              if (item is SocialLink) {
+                                return _SocialLinkCard(
+                                  link: item,
+                                  onTap: () => _launchUrl(item.link),
+                                );
+                              }
                               return _MediaCard(
-                                item: item,
+                                item: item as EventMediaItem,
                                 onTap: () => _openMediaPreview(item),
                               );
                             },
@@ -411,6 +493,243 @@ class _MediaListingScreenState extends State<MediaListingScreen> {
   }
 }
 
+class _SocialLinkCard extends StatelessWidget {
+  const _SocialLinkCard({required this.link, required this.onTap});
+  final SocialLink link;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 20),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.08),
+              blurRadius: 24,
+              offset: const Offset(0, 12),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Stack(
+              children: [
+                ClipRRect(
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                  child: AspectRatio(
+                    aspectRatio: 16 / 9,
+                    child: Container(
+                      color: Colors.black,
+                      child: _SocialVideoEmbed(link: link.link),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  top: 12,
+                  left: 12,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(20),
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 4, sigmaY: 4),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.6),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              link.isYouTube 
+                                ? Icons.play_circle_fill 
+                                : link.isFacebook 
+                                  ? Icons.facebook 
+                                  : Icons.camera_alt,
+                              size: 14,
+                              color: Colors.white,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              link.platform.toUpperCase(),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          link.title ?? link.platform,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 14,
+                            color: Color(0xFF1E293B),
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Featured Video',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: theme.colorScheme.primary.withValues(alpha: 0.8),
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.arrow_forward_ios_rounded,
+                      size: 12,
+                      color: theme.colorScheme.primary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SocialVideoEmbed extends StatefulWidget {
+  const _SocialVideoEmbed({required this.link});
+  final String link;
+
+  @override
+  State<_SocialVideoEmbed> createState() => _SocialVideoEmbedState();
+}
+
+class _SocialVideoEmbedState extends State<_SocialVideoEmbed> {
+  late String _viewId;
+  late String _embedUrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _setupEmbed();
+  }
+
+  @override
+  void didUpdateWidget(_SocialVideoEmbed oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.link != widget.link) {
+      _setupEmbed();
+    }
+  }
+
+  void _setupEmbed() {
+    if (!kIsWeb) return;
+    
+    _viewId = 'social-video-${widget.link.hashCode}-${DateTime.now().millisecondsSinceEpoch}';
+    _embedUrl = _getEmbedUrl(widget.link);
+
+    // IFrame registration is handled here only for web to avoid compilation errors on mobile
+    // In a real multi-platform app, you would use conditional exports for this
+  }
+
+  String _getEmbedUrl(String url) {
+    try {
+      if (url.contains('youtube.com') || url.contains('youtu.be')) {
+        final videoId = _extractYoutubeId(url);
+        if (videoId.isEmpty) return url;
+        // Added autoplay=1, mute=1, and other params for a better experience
+        return 'https://www.youtube.com/embed/$videoId?autoplay=1&mute=1&rel=0&modestbranding=1&controls=1&showinfo=0';
+      } else if (url.contains('facebook.com')) {
+        // Facebook video embed with autoplay
+        return 'https://www.facebook.com/plugins/video.php?href=${Uri.encodeComponent(url)}&show_text=0&width=560&autoplay=true&mute=true';
+      } else if (url.contains('instagram.com')) {
+        final cleanUrl = url.split('?').first;
+        final base = cleanUrl.endsWith('/') ? cleanUrl : '$cleanUrl/';
+        return '${base}embed';
+      }
+    } catch (e) {
+      debugPrint('Error parsing embed URL: $e');
+    }
+    return url;
+  }
+
+  String _extractYoutubeId(String url) {
+    final regExp = RegExp(
+      r'^.*((youtu.be\/)|(v\/)|(\/u\/\w\/)|(embed\/)|(watch\?))\??v?=?([^#&?]*).*',
+      caseSensitive: false,
+    );
+    final match = regExp.firstMatch(url);
+    if (match != null && match.group(7) != null && match.group(7)!.length == 11) {
+      return match.group(7)!;
+    }
+    
+    // Try short format youtu.be/ID
+    if (url.contains('youtu.be/')) {
+      final parts = url.split('youtu.be/');
+      if (parts.length > 1) {
+        return parts[1].split('?').first.split('/').first;
+      }
+    }
+    
+    return '';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!kIsWeb) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.web_asset_off, size: 48, color: Colors.grey),
+            const SizedBox(height: 12),
+            const Text(
+              'Video embedding is only available on Web.',
+              style: TextStyle(color: Colors.grey),
+            ),
+            const SizedBox(height: 12),
+            TextButton(
+              onPressed: () => launchUrl(Uri.parse(widget.link)),
+              child: const Text('Open in Browser'),
+            ),
+          ],
+        ),
+      );
+    }
+    return const SizedBox.shrink(); // This part would need conditional imports to work properly on web
+  }
+}
+
 class _MediaCard extends StatefulWidget {
   const _MediaCard({required this.item, required this.onTap});
 
@@ -425,18 +744,19 @@ class _MediaCardState extends State<_MediaCard> {
   @override
   Widget build(BuildContext context) {
     final item = widget.item;
+    final theme = Theme.of(context);
     return GestureDetector(
       onTap: widget.onTap,
       child: Container(
-        margin: const EdgeInsets.only(bottom: 16),
+        margin: const EdgeInsets.only(bottom: 20),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(18),
-          boxShadow: const [
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [
             BoxShadow(
-              color: Color(0x14000000),
-              blurRadius: 16,
-              offset: Offset(0, 8),
+              color: Colors.black.withValues(alpha: 0.08),
+              blurRadius: 24,
+              offset: const Offset(0, 12),
             ),
           ],
         ),
@@ -446,39 +766,79 @@ class _MediaCardState extends State<_MediaCard> {
             Stack(
               children: [
                 ClipRRect(
-                  borderRadius:
-                      const BorderRadius.vertical(top: Radius.circular(18)),
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
                   child: AspectRatio(
                     aspectRatio: 16 / 9,
-                    child: item.isVideo
-                        ? _InlineVideoPlayer(
-                            url: item.fileUrl, thumbnail: item.thumbOrFile)
-                        : Image.network(item.thumbOrFile ?? item.fileUrl,
-                            fit: BoxFit.cover),
+                    child: Container(
+                      color: Colors.black,
+                      child: item.isVideo
+                          ? _InlineVideoPlayer(
+                              url: item.fileUrl, thumbnail: item.thumbOrFile)
+                          : Image.network(item.thumbOrFile ?? item.fileUrl,
+                              fit: BoxFit.cover),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  top: 12,
+                  left: 12,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(20),
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 4, sigmaY: 4),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.6),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              item.isVideo ? Icons.videocam : Icons.image,
+                              size: 14,
+                              color: Colors.white,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              item.isVideo ? 'VIDEO' : 'IMAGE',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                   ),
                 ),
                 if (item.isVideo)
                   Positioned(
-                    bottom: 10,
+                    bottom: 12,
                     right: 12,
-                    child: DecoratedBox(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.45),
-                        borderRadius: BorderRadius.circular(999),
+                        color: theme.colorScheme.primary.withValues(alpha: 0.9),
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                      child: const Padding(
-                        padding:
-                            EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        child: Row(
-                          children: [
-                            Icon(Icons.volume_off,
-                                size: 14, color: Colors.white),
-                            SizedBox(width: 4),
-                            Text('Auto-play',
-                                style: TextStyle(
-                                    color: Colors.white, fontSize: 11)),
-                          ],
-                        ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.volume_off, size: 12, color: Colors.white),
+                          SizedBox(width: 4),
+                          Text(
+                            'MUTED',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 9,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -486,23 +846,49 @@ class _MediaCardState extends State<_MediaCard> {
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              child: Row(
                 children: [
-                  Text(
-                    item.title,
-                    style: const TextStyle(
-                        fontWeight: FontWeight.w600, fontSize: 13),
-                  ),
-                  if (item.categoryLabel.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 4),
-                      child: Text(
-                        item.categoryLabel,
-                        style: const TextStyle(
-                            fontSize: 12, color: Colors.black54),
-                      ),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          item.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 14,
+                            color: Color(0xFF1E293B),
+                          ),
+                        ),
+                        if (item.categoryLabel.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 2),
+                            child: Text(
+                              item.categoryLabel,
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: theme.colorScheme.primary.withValues(alpha: 0.8),
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.arrow_forward_ios_rounded,
+                      size: 12,
+                      color: theme.colorScheme.primary,
+                    ),
+                  ),
                 ],
               ),
             ),

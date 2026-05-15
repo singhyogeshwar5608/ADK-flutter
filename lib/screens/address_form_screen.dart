@@ -5,6 +5,7 @@ import '../models/stored_address.dart';
 import '../services/address_storage_service.dart';
 import '../services/api_client.dart';
 import '../services/pin_code_service.dart';
+import '../services/pincode_api_service.dart';
 import '../theme/app_theme.dart';
 import '../state/profile_state.dart';
 
@@ -63,68 +64,63 @@ class _AddressFormScreenState extends State<AddressFormScreen> {
   
   /// Fetch PIN code data from API
   Future<void> _fetchPincodeDataFromApi(String pincode) async {
-    print('=== API FETCH START ===');
+    print('=== PINCODE FETCH START ===');
     print('Fetching data for PIN code: $pincode');
     
     try {
-      final pincodeData = await ApiClient.instance.fetchPincode(pincode);
-      print('API Response received: $pincodeData');
+      // 1. Try public Pincode API first (Zippopotam is CORS friendly)
+      print('Trying PincodeApiService...');
+      final publicData = await PincodeApiService.getPincodeData(pincode);
       
-      if (pincodeData != null) {
-        print('SUCCESS: API Data found');
-        print('City: ${pincodeData['city']}');
-        print('State: ${pincodeData['state']}');
-        
-        // Update form fields with proper state management
-        print('Before update - City: "${_city.text}", State: "${_state.text}"');
-        print('API Data - City: "${pincodeData['city']}", State: "${pincodeData['state']}"');
-        
+      if (publicData != null && publicData['city'] != null && publicData['state'] != null) {
+        print('SUCCESS: Public API found data: ${publicData['city']}, ${publicData['state']}');
         if (mounted) {
           setState(() {
-            _city.text = (pincodeData['city'] ?? '').toString();
-            _state.text = (pincodeData['state'] ?? '').toString();
+            _city.text = publicData['city']!;
+            _state.text = publicData['state']!;
           });
         }
-        
-        print('After update - City: "${_city.text}", State: "${_state.text}"');
-        print('Form fields updated successfully');
-        
-        // Force immediate UI refresh
-        Future.delayed(const Duration(milliseconds: 50), () {
-          if (mounted) {
-            setState(() {});
-          }
-        });
-      } else {
-        print('API failed, trying fallback service...');
-        final fallbackData = PinCodeService.getPinCodeData(pincode);
-        if (fallbackData != null) {
-          print('SUCCESS: Fallback data found');
-          print('City: ${fallbackData['city']}');
-          print('State: ${fallbackData['state']}');
-          _city.text = fallbackData['city'] ?? '';
-          _state.text = fallbackData['state'] ?? '';
-          print('Form fields updated via fallback');
-        } else {
-          print('ERROR: No data found for PIN code: $pincode');
-        }
+        return;
       }
-    } catch (e) {
-      print('ERROR: Exception in API call: $e');
-      print('Stack trace: ${e.runtimeType}');
-      // Fallback to local service on API error
+      
+      // 2. Fallback to internal API (if public failed)
+      print('Public API failed, trying internal API...');
+      try {
+        final pincodeData = await ApiClient.instance.fetchPincode(pincode);
+        if (pincodeData != null) {
+          print('SUCCESS: Internal API found data');
+          if (mounted) {
+            setState(() {
+              _city.text = (pincodeData['city'] ?? '').toString();
+              _state.text = (pincodeData['state'] ?? '').toString();
+            });
+          }
+          return;
+        }
+      } catch (apiError) {
+        print('Internal API call failed: $apiError');
+      }
+      
+      // 3. Last fallback to local hardcoded service
+      print('Both APIs failed, trying local fallback service...');
       final fallbackData = PinCodeService.getPinCodeData(pincode);
       if (fallbackData != null) {
-        print('SUCCESS: Emergency fallback data found');
-        _city.text = fallbackData['city'] ?? '';
-        _state.text = fallbackData['state'] ?? '';
-        print('Form fields updated via emergency fallback');
+        if (mounted) {
+          setState(() {
+            _city.text = fallbackData['city'] ?? '';
+            _state.text = fallbackData['state'] ?? '';
+          });
+        }
+        print('SUCCESS: Local fallback found data');
       } else {
-        print('ERROR: No fallback data available for PIN code: $pincode');
+        print('ERROR: No data found in any service for $pincode');
       }
+      
+    } catch (e) {
+      print('ERROR: Exception in pincode fetch flow: $e');
+    } finally {
+      print('=== PINCODE FETCH END ===');
     }
-    
-    print('=== API FETCH END ===');
   }
   bool _saveToPrefs = true;
   bool _isDefault = false;

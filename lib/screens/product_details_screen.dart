@@ -81,6 +81,9 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final product = _product;
+
+    final dynamicPriceData = product.calculateDynamicPrice('India', 'Haryana');
+
     final catalogState = ProductCatalogProvider.of(context);
     final sourceEntries = catalogState.entries;
     final relatedEntries =
@@ -101,7 +104,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                   constraints: const BoxConstraints(maxWidth: 430),
                   child: SingleChildScrollView(
                     controller: _scrollController,
-                    padding: const EdgeInsets.fromLTRB(16, 96, 16, 132),
+                    padding: const EdgeInsets.fromLTRB(16, 96, 16, 96),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -109,7 +112,10 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                         const SizedBox(height: 20),
                         _TitleSection(product: product),
                         const SizedBox(height: 4),
-                        PriceSection(price: product.price, bv: product.bv),
+                        PriceSection(
+                          product: product,
+                          dynamicPriceData: dynamicPriceData,
+                        ),
                         const SizedBox(height: 16),
                         _ProductSummaryCard(
                           product: product,
@@ -124,7 +130,6 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                           entries: relatedEntries,
                           onProductTap: _openRelatedProduct,
                         ),
-                        const SizedBox(height: 32),
                       ],
                     ),
                   ),
@@ -699,14 +704,20 @@ class _QuantityChipButton extends StatelessWidget {
 /* ---------------------- PRICE SECTION ---------------------- */
 
 class PriceSection extends StatelessWidget {
-  const PriceSection({super.key, required this.price, required this.bv});
+  const PriceSection({
+    super.key,
+    required this.product,
+    required this.dynamicPriceData,
+  });
 
-  final double price;
-  final int bv;
+  final Product product;
+  final Map<String, dynamic> dynamicPriceData;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final finalPrice = dynamicPriceData['finalPrice'] as double;
+    final gstType = dynamicPriceData['gstType'] as String;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -714,7 +725,7 @@ class PriceSection extends StatelessWidget {
         Row(
           children: [
             Text(
-              '₹${price.toStringAsFixed(2)}',
+              '₹${finalPrice.toStringAsFixed(2)}',
               style: TextStyle(
                 fontSize: 19,
                 fontWeight: FontWeight.w800,
@@ -722,6 +733,23 @@ class PriceSection extends StatelessWidget {
                 color: theme.colorScheme.onSurface,
               ),
             ),
+            const SizedBox(width: 8),
+            if (gstType.isNotEmpty)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  gstType,
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w800,
+                    color: theme.colorScheme.primary,
+                  ),
+                ),
+              ),
             const SizedBox(width: 12),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
@@ -733,7 +761,7 @@ class PriceSection extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    '$bv BV',
+                    '${product.bv} BV',
                     style: const TextStyle(
                       color: AppColors.primary,
                       fontWeight: FontWeight.w800,
@@ -751,16 +779,6 @@ class PriceSection extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 6),
-        Text(
-          'Inclusive of all taxes',
-          style: TextStyle(
-            fontSize: 12,
-            color: theme.colorScheme.onSurface.withValues(alpha: 0.58),
-            height: 1.3,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
       ],
     );
   }
@@ -777,29 +795,163 @@ class _DescriptionSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
+    // Parse the markdown-like description into stylish blocks
+    final blocks = _parseDescription(description);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           'Description',
           style: theme.textTheme.titleMedium?.copyWith(
-            fontSize: 18,
-            fontWeight: FontWeight.w700,
+            fontSize: 20,
+            fontWeight: FontWeight.w800,
+            letterSpacing: -0.5,
           ),
         ),
-        const SizedBox(height: 8),
-        Text(
-          description,
-          style: TextStyle(
-            fontSize: 12,
-            height: 1.55,
-            color: theme.colorScheme.onSurface.withValues(alpha: 0.72),
-            fontWeight: FontWeight.w400,
-          ),
-        ),
+        const SizedBox(height: 16),
+        ...blocks.map((block) => _buildDescriptionBlock(context, block)),
       ],
     );
   }
+
+  List<_DescriptionBlock> _parseDescription(String text) {
+    final lines = text.split('\n');
+    final List<_DescriptionBlock> blocks = [];
+    _DescriptionBlock? currentBlock;
+
+    for (var line in lines) {
+      line = line.trim();
+      if (line.isEmpty) continue;
+
+      // Handle Section Headers (### **Title**)
+      if (line.startsWith('###')) {
+        final title = line.replaceAll('#', '').replaceAll('*', '').trim();
+        currentBlock = _DescriptionBlock(title: title, items: []);
+        blocks.add(currentBlock);
+        continue;
+      }
+
+      // Handle Key Benefits or bold titles (**Title**)
+      if (line.startsWith('**') && line.endsWith('**')) {
+        final title = line.replaceAll('*', '').trim();
+        currentBlock = _DescriptionBlock(title: title, items: []);
+        blocks.add(currentBlock);
+        continue;
+      }
+
+      // Handle List Items (* Item)
+      if (line.startsWith('*')) {
+        final item = line.substring(1).replaceAll('*', '').trim();
+        if (currentBlock == null) {
+          currentBlock = _DescriptionBlock(title: '', items: []);
+          blocks.add(currentBlock);
+        }
+        currentBlock.items.add(item);
+      } else if (line != '---') {
+        // Handle plain text
+        if (currentBlock == null) {
+          currentBlock = _DescriptionBlock(title: '', items: []);
+          blocks.add(currentBlock);
+        }
+        currentBlock.items.add(line);
+      }
+    }
+
+    return blocks;
+  }
+
+  Widget _buildDescriptionBlock(BuildContext context, _DescriptionBlock block) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E293B) : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: theme.colorScheme.primary.withValues(alpha: 0.08),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (block.title.isNotEmpty) ...[
+            Row(
+              children: [
+                Container(
+                  width: 4,
+                  height: 18,
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primary,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    block.title,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w800,
+                      color: theme.colorScheme.primary,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+          ],
+          ...block.items.map((item) => Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (block.items.length > 1)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 6, right: 10),
+                        child: Container(
+                          width: 5,
+                          height: 5,
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.primary.withValues(alpha: 0.5),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ),
+                    Expanded(
+                      child: Text(
+                        item,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
+                          height: 1.5,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              )),
+        ],
+      ),
+    );
+  }
+}
+
+class _DescriptionBlock {
+  _DescriptionBlock({required this.title, required this.items});
+  final String title;
+  final List<String> items;
 }
 
 /* ---------------------- BOTTOM ACTION BAR (FIXED _showSnackBar) ---------------------- */
@@ -996,22 +1148,29 @@ class RelatedProductsSection extends StatelessWidget {
         ),
         const SizedBox(height: 16),
         SizedBox(
-          height: 360,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            physics: const BouncingScrollPhysics(),
-            padding: EdgeInsets.zero,
-            itemCount: entries.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 16),
-            itemBuilder: (context, index) {
-              final entry = entries[index];
-              return SizedBox(
-                width: 230,
-                child: ProductCard(
-                  product: entry.product,
-                  rating: entry.rating,
-                  onProductTap: () => onProductTap(entry.product),
-                ),
+          height: 290,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final availableWidth = constraints.maxWidth;
+              const spacing = 16.0;
+              final itemWidth = (availableWidth - spacing) / 2;
+              return ListView.separated(
+                scrollDirection: Axis.horizontal,
+                physics: const BouncingScrollPhysics(),
+                padding: EdgeInsets.zero,
+                itemCount: entries.length,
+                separatorBuilder: (_, __) => const SizedBox(width: spacing),
+                itemBuilder: (context, index) {
+                  final entry = entries[index];
+                  return SizedBox(
+                    width: itemWidth,
+                    child: ProductCard(
+                      product: entry.product,
+                      rating: entry.rating,
+                      onProductTap: () => onProductTap(entry.product),
+                    ),
+                  );
+                },
               );
             },
           ),

@@ -13,6 +13,7 @@ class ShippingDetailsPayload {
     required this.fullName,
     required this.primaryPhone,
     this.secondaryPhone,
+    required this.country,
     required this.state,
     required this.city,
     required this.zipCode,
@@ -27,6 +28,7 @@ class ShippingDetailsPayload {
   final String fullName;
   final String primaryPhone;
   final String? secondaryPhone;
+  final String country;
   final String state;
   final String city;
   final String zipCode;

@@ -239,7 +239,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
             SliverPadding(
-              padding: const EdgeInsets.fromLTRB(11, 12, 11, 120),
+              padding: const EdgeInsets.fromLTRB(11, 12, 11, 25),
               sliver: SliverToBoxAdapter(
                 child: LayoutBuilder(
                   builder: (context, constraints) {

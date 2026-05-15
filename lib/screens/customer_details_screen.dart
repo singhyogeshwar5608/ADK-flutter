@@ -4,6 +4,8 @@ import 'package:flutter/services.dart';
 import '../models/stored_address.dart';
 import '../navigation/checkout_arguments.dart';
 import '../services/address_storage_service.dart';
+import '../services/api_client.dart';
+import '../services/pincode_api_service.dart';
 import '../state/profile_state.dart';
 import 'all_products_screen.dart';
 import 'profile_screen.dart';
@@ -67,6 +69,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
   final _fullNameCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
+  final _countryCtrl = TextEditingController(text: 'India');
   final _stateCtrl = TextEditingController();
   final _cityCtrl = TextEditingController();
   final _zipCtrl = TextEditingController();
@@ -83,6 +86,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
         _fullNameCtrl,
         _phoneCtrl,
         _emailCtrl,
+        _countryCtrl,
         _stateCtrl,
         _cityCtrl,
         _zipCtrl,
@@ -97,11 +101,52 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
     for (final controller in _allFields) {
       controller.addListener(_updateFormCompletionState);
     }
+    _zipCtrl.addListener(_onZipChanged);
     _updateFormCompletionState();
     WidgetsBinding.instance
         .addPostFrameCallback((_) => _maybePrefillFromStorage());
     WidgetsBinding.instance
         .addPostFrameCallback((_) => _loadSavedAddresses());
+  }
+
+  void _onZipChanged() {
+    final zip = _zipCtrl.text.trim();
+    if (zip.length == 6) {
+      _fetchPincodeData(zip);
+    }
+  }
+
+  Future<void> _fetchPincodeData(String pincode) async {
+    try {
+      // Try public API first
+      final data = await PincodeApiService.getPincodeData(pincode);
+      if (data != null && data['city'] != null && data['state'] != null) {
+        if (mounted) {
+          setState(() {
+            _cityCtrl.text = data['city']!;
+            _stateCtrl.text = data['state']!;
+            if (data['country'] != null) {
+              _countryCtrl.text = data['country']!;
+            }
+          });
+        }
+        return;
+      }
+
+      // Fallback to internal API
+      final internal = await ApiClient.instance.fetchPincode(pincode);
+      if (internal != null && mounted) {
+        setState(() {
+          _cityCtrl.text = (internal['city'] ?? '').toString();
+          _stateCtrl.text = (internal['state'] ?? '').toString();
+          if (internal['country'] != null) {
+            _countryCtrl.text = internal['country'].toString();
+          }
+        });
+      }
+    } catch (e) {
+      debugPrint('Error fetching pincode in CustomerDetails: $e');
+    }
   }
 
   Future<void> _loadSavedAddresses() async {
@@ -135,6 +180,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
       if ((p.email ?? '').trim().isNotEmpty) {
         _emailCtrl.text = p.email!.trim();
       }
+      _countryCtrl.text = p.country;
       _stateCtrl.text = p.state;
       _cityCtrl.text = p.city;
       _zipCtrl.text = p.zipCode;
@@ -171,6 +217,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
       if ((shippingDetails.email ?? '').trim().isNotEmpty) {
         _emailCtrl.text = shippingDetails.email!.trim();
       }
+      _countryCtrl.text = shippingDetails.country;
       _stateCtrl.text = shippingDetails.state;
       _cityCtrl.text = shippingDetails.city;
       _zipCtrl.text = shippingDetails.zipCode;
@@ -183,9 +230,11 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
 
   @override
   void dispose() {
+    _zipCtrl.removeListener(_onZipChanged);
     _fullNameCtrl.dispose();
     _phoneCtrl.dispose();
     _emailCtrl.dispose();
+    _countryCtrl.dispose();
     _stateCtrl.dispose();
     _cityCtrl.dispose();
     _zipCtrl.dispose();
@@ -201,6 +250,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
     final requiredCtrls = [
       _fullNameCtrl,
       _phoneCtrl,
+      _countryCtrl,
       _stateCtrl,
       _cityCtrl,
       _zipCtrl,
@@ -221,6 +271,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
       fullName: _fullNameCtrl.text.trim(),
       primaryPhone: _phoneCtrl.text.trim(),
       secondaryPhone: null,
+      country: _countryCtrl.text.trim(),
       state: _stateCtrl.text.trim(),
       city: _cityCtrl.text.trim(),
       zipCode: _zipCtrl.text.trim(),
@@ -237,6 +288,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
       _fullNameCtrl.text = address.name.trim();
       _phoneCtrl.text = address.phone.trim();
       _emailCtrl.text = address.email?.trim() ?? '';
+      _countryCtrl.text = address.country.trim();
       _stateCtrl.text = address.state.trim();
       _cityCtrl.text = address.city.trim();
       _zipCtrl.text = address.pincode.trim();
@@ -537,22 +589,30 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                     if (_guestBuyer) ...[
                       const SizedBox(height: 12),
                       _shippingField(
-                        context,
-                        controller: _emailCtrl,
-                        placeholder: 'Email (order updates)',
-                        keyboardType: TextInputType.emailAddress,
-                        textCapitalization: TextCapitalization.none,
-                        validator: _guestEmailValidator,
-                      ),
-                    ],
-                    const SizedBox(height: 12),
-                    _shippingField(
                       context,
-                      controller: _stateCtrl,
-                      placeholder: 'State / Province',
-                      textCapitalization: TextCapitalization.words,
-                      validator: (v) => _required(v, 'State / Province'),
+                      controller: _emailCtrl,
+                      placeholder: 'Email (order updates)',
+                      keyboardType: TextInputType.emailAddress,
+                      textCapitalization: TextCapitalization.none,
+                      validator: _guestEmailValidator,
                     ),
+                  ],
+                  const SizedBox(height: 12),
+                  _shippingField(
+                    context,
+                    controller: _countryCtrl,
+                    placeholder: 'Country',
+                    textCapitalization: TextCapitalization.words,
+                    validator: (v) => _required(v, 'Country'),
+                  ),
+                  const SizedBox(height: 12),
+                  _shippingField(
+                    context,
+                    controller: _stateCtrl,
+                    placeholder: 'State / Province',
+                    textCapitalization: TextCapitalization.words,
+                    validator: (v) => _required(v, 'State / Province'),
+                  ),
                     const SizedBox(height: 12),
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,

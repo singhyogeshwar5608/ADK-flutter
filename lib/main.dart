@@ -38,6 +38,7 @@ import 'state/theme_controller.dart';
 import 'state/cart_state.dart';
 import 'state/profile_state.dart';
 import 'state/wishlist_state.dart';
+import 'state/location_state.dart';
 import 'theme/app_theme.dart';
 import 'utils/deep_link_service.dart';
 
@@ -61,8 +62,8 @@ class _NetShopAppState extends State<NetShopApp> {
   final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
   late final DeepLinkService _deepLinks = DeepLinkService(_navigatorKey);
 
-  late final CartState _cartState;
   late final ProfileState _profileState;
+  late final CartState _cartState;
   late final WishlistState _wishlistState;
   late final ThemeController _themeController;
   late final ProductCatalogState _productCatalogState;
@@ -101,73 +102,73 @@ class _NetShopAppState extends State<NetShopApp> {
           child: ProductCatalogProvider(
             notifier: _productCatalogState,
             child: ThemeControllerProvider(
-              notifier: _themeController,
-              child: AnimatedBuilder(
-                animation: _themeController,
-                builder: (context, _) => MaterialApp(
-                  title: 'NetShop Partner Portal',
-                  debugShowCheckedModeBanner: false,
-                  theme: AppTheme.lightTheme,
-                  darkTheme: AppTheme.darkTheme,
-                  themeMode: _themeController.mode,
-                  navigatorKey: _navigatorKey,
-                  home: const HomeScreen(),
-                  onGenerateRoute: (settings) {
-                    if (settings.name == BinaryTreeScreen.routeName) {
-                      return MaterialPageRoute(
-                        builder: (context) => BinaryTreeScreen(
-                          memberId: settings.arguments as String? ?? 'root',
-                        ),
-                      );
-                    }
-                    return null;
-                  },
-                  routes: {
-                    CartScreen.routeName: (_) => const CartScreen(),
-                    '/checkout': (_) => const CheckoutScreen(),
-                    WalletScreen.routeName: (_) => const WalletScreen(),
-                    AddFundsScreen.routeName: (_) => const AddFundsScreen(),
-                    WithdrawScreen.routeName: (_) => const WithdrawScreen(),
-                    ProfileScreen.routeName: (_) => const ProfileScreen(),
-                    ProfileEditScreen.routeName: (_) =>
-                        const ProfileEditScreen(),
-                    TransactionsScreen.routeName: (_) =>
-                        const TransactionsScreen(),
-                    WishlistScreen.routeName: (_) => const WishlistScreen(),
-                    AllProductsScreen.routeName: (_) =>
-                        const AllProductsScreen(),
-                    CustomerDetailsScreen.routeName: (_) =>
-                        const CustomerDetailsScreen(),
-                    AddressesScreen.routeName: (_) => const AddressesScreen(),
-                    AddressFormScreen.routeName: (_) => const AddressFormScreen(),
-                    NotificationsScreen.routeName: (_) =>
-                        const NotificationsScreen(),
-                    MyTeamScreen.routeName: (_) => const MyTeamScreen(),
-                    RegisterMemberScreen.routeName: (_) =>
-                        const RegisterMemberScreen(),
-                    MyReferralScreen.routeName: (_) =>
-                        const MyReferralScreen(),
-                    MemberDetailScreen.routeName: (_) =>
-                        const MemberDetailScreen(),
-                    SettingsScreen.routeName: (_) => const SettingsScreen(),
-                    MenuScreen.routeName: (_) => const MenuScreen(),
-                    MediaListingScreen.routeName: (_) =>
-                        const MediaListingScreen(),
-                    AdkEventsScreen.routeName: (_) => const AdkEventsScreen(),
-                    ProductCatalogueScreen.routeName: (_) =>
-                        const ProductCatalogueScreen(),
-                    DeliveryCenterScreen.routeName: (_) =>
-                        const DeliveryCenterScreen(),
-                    ContactUsScreen.routeName: (_) => const ContactUsScreen(),
-                    PrivacyPolicyScreen.routeName: (_) =>
-                        const PrivacyPolicyScreen(),
-                    TermsConditionsScreen.routeName: (_) =>
-                        const TermsConditionsScreen(),
-                    LoginScreen.routeName: (_) => const LoginScreen(),
-                    SignupScreen.routeName: (_) => const SignupScreen(),
-                  },
+                notifier: _themeController,
+                child: AnimatedBuilder(
+                  animation: _themeController,
+                  builder: (context, _) => MaterialApp(
+                    title: 'NetShop Partner Portal',
+                    debugShowCheckedModeBanner: false,
+                    theme: AppTheme.lightTheme,
+                    darkTheme: AppTheme.darkTheme,
+                    themeMode: _themeController.mode,
+                    navigatorKey: _navigatorKey,
+                    home: const HomeScreen(),
+                    onGenerateRoute: (settings) {
+                      if (settings.name == BinaryTreeScreen.routeName) {
+                        return MaterialPageRoute(
+                          builder: (context) => BinaryTreeScreen(
+                            memberId: settings.arguments as String? ?? 'root',
+                          ),
+                        );
+                      }
+                      return null;
+                    },
+                    routes: {
+                      CartScreen.routeName: (_) => const CartScreen(),
+                      '/checkout': (_) => const CheckoutScreen(),
+                      WalletScreen.routeName: (_) => const WalletScreen(),
+                      AddFundsScreen.routeName: (_) => const AddFundsScreen(),
+                      WithdrawScreen.routeName: (_) => const WithdrawScreen(),
+                      ProfileScreen.routeName: (_) => const ProfileScreen(),
+                      ProfileEditScreen.routeName: (_) =>
+                          const ProfileEditScreen(),
+                      TransactionsScreen.routeName: (_) =>
+                          const TransactionsScreen(),
+                      WishlistScreen.routeName: (_) => const WishlistScreen(),
+                      AllProductsScreen.routeName: (_) =>
+                          const AllProductsScreen(),
+                      CustomerDetailsScreen.routeName: (_) =>
+                          const CustomerDetailsScreen(),
+                      AddressesScreen.routeName: (_) => const AddressesScreen(),
+                      AddressFormScreen.routeName: (_) => const AddressFormScreen(),
+                      NotificationsScreen.routeName: (_) =>
+                          const NotificationsScreen(),
+                      MyTeamScreen.routeName: (_) => const MyTeamScreen(),
+                      RegisterMemberScreen.routeName: (_) =>
+                          const RegisterMemberScreen(),
+                      MyReferralScreen.routeName: (_) =>
+                          const MyReferralScreen(),
+                      MemberDetailScreen.routeName: (_) =>
+                          const MemberDetailScreen(),
+                      SettingsScreen.routeName: (_) => const SettingsScreen(),
+                      MenuScreen.routeName: (_) => const MenuScreen(),
+                      MediaListingScreen.routeName: (_) =>
+                          const MediaListingScreen(),
+                      AdkEventsScreen.routeName: (_) => const AdkEventsScreen(),
+                      ProductCatalogueScreen.routeName: (_) =>
+                          const ProductCatalogueScreen(),
+                      DeliveryCenterScreen.routeName: (_) =>
+                          const DeliveryCenterScreen(),
+                      ContactUsScreen.routeName: (_) => const ContactUsScreen(),
+                      PrivacyPolicyScreen.routeName: (_) =>
+                          const PrivacyPolicyScreen(),
+                      TermsConditionsScreen.routeName: (_) =>
+                          const TermsConditionsScreen(),
+                      LoginScreen.routeName: (_) => const LoginScreen(),
+                      SignupScreen.routeName: (_) => const SignupScreen(),
+                    },
+                  ),
                 ),
-              ),
             ),
           ),
         ),

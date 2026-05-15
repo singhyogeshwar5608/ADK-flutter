@@ -740,7 +740,7 @@ class _AllProductsScreenState extends State<AllProductsScreen> {
               ),
             ),
             SliverPadding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 25),
               sliver: SliverToBoxAdapter(
                 child: Builder(builder: (context) {
                   if (isLoading) {

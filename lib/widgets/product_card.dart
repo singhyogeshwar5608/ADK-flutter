@@ -70,6 +70,9 @@ class _ProductCardState extends State<ProductCard> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
+    final dynamicPriceData = widget.product.calculateDynamicPrice('India', 'Haryana');
+    final finalPrice = dynamicPriceData['finalPrice'] as double;
+
     return LayoutBuilder(
       builder: (context, constraints) {
         final isCompactCard = constraints.maxWidth <= 220;
@@ -419,7 +422,8 @@ class _ProductCardState extends State<ProductCard> {
                       children: [
                         Expanded(
                           child: Text(
-                            '₹${widget.product.price.toStringAsFixed(2)}',
+                            '₹${finalPrice.toStringAsFixed(2)}',
+                            key: ValueKey('price_${widget.product.id}_${finalPrice}'),
                             style: priceStyle,
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -436,6 +440,7 @@ class _ProductCardState extends State<ProductCard> {
                             const SizedBox(width: 4),
                             Text(
                               '${widget.product.bv} BV',
+                              key: ValueKey('bv_${widget.product.id}_${widget.product.bv}'),
                               style: bvStyle,
                             ),
                           ],

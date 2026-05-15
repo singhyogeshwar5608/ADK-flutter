@@ -393,30 +393,41 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       }
     }
 
-    final subtotal = directPurchase != null
-        ? directPurchase.product.price * directPurchase.quantity
-        : cart.subtotal;
-    final shipping = directPurchase != null
-        ? directPurchase.product.shippingCharge * directPurchase.quantity
-        : cart.items.fold(0.0, (sum, item) => sum + item.totalShipping);
-    final tax = directPurchase != null ? subtotal * cart.taxRate : cart.tax;
-    final total = subtotal + shipping + tax;
-
-    debugPrint('Checkout: directPurchase is null? ${directPurchase == null}');
-    debugPrint('Checkout: cart.subtotal = ${cart.subtotal}');
-    debugPrint('Checkout: cart.totalItems = ${cart.totalItems}');
-    debugPrint('Checkout: calculated subtotal = $subtotal');
-    debugPrint('Checkout: calculated total = $total');
-
-    if (directPurchase != null) {
-      debugPrint(
-          'Checkout: Direct purchase - product: ${directPurchase.product.title}, price: ${directPurchase.product.price}, quantity: ${directPurchase.quantity}');
-    }
-
     final mergedShipping = _manualShipping ??
         shippingDetails ??
         _prefsShipping ??
         _cartBootstrapShipping;
+
+    final country = mergedShipping?.country ?? 'India';
+    final state = mergedShipping?.state ?? 'Haryana';
+
+    double subtotalValue = 0;
+    double taxValue = 0;
+    double totalValue = 0;
+    double unitPriceValue = 0;
+    String gstType = 'GST';
+    double gstPercent = 0;
+
+    if (directPurchase != null) {
+      final data = directPurchase.product.calculateDynamicPrice(country, state);
+      final basePrice = data['basePrice'] as double;
+      final gstAmount = data['gstAmount'] as double;
+      unitPriceValue = data['finalPrice'] as double;
+      gstType = data['gstType'] as String;
+      gstPercent = data['gstPercent'] as double;
+      
+      subtotalValue = basePrice * directPurchase.quantity;
+      taxValue = gstAmount * directPurchase.quantity;
+      totalValue = subtotalValue + taxValue;
+    } else {
+      subtotalValue = cart.selectedSubtotal(country, state);
+      taxValue = cart.selectedTax(country, state);
+      totalValue = cart.selectedTotal(country, state);
+    }
+
+    final totalBv = directPurchase != null
+        ? directPurchase.product.bv * directPurchase.quantity
+        : cart.selectedTotalBv;
 
     final guestCheckout =
         ProfileProvider.of(context).data.partnerId.trim().isEmpty;
@@ -442,6 +453,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                     directPurchase: directPurchase,
                     shippingDetails: mergedShipping,
                     guestCheckout: guestCheckout,
+                    subtotal: subtotalValue,
+                    tax: taxValue,
+                    total: totalValue,
+                    totalBv: totalBv,
+                    gstType: gstType,
+                    gstPercent: gstPercent,
+                    unitPrice: unitPriceValue,
                     onOpenAddressBook: _openAddressBook,
                     savedAddresses: _savedAddresses,
                     onSelectSavedAddress: _selectSavedCheckout,
@@ -455,7 +473,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                 Padding(
                   padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
                   child: _MockOrderButton(
-                    total: total,
+                    total: totalValue,
+                    tax: taxValue,
+                    unitPrice: unitPriceValue,
                     directPurchase: directPurchase,
                     cart: cart,
                     shippingDetails: mergedShipping,
@@ -463,10 +483,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   ),
                 ),
                 _CheckoutFooter(
-                  total: total,
+                  total: totalValue,
                   isProcessing: _isProcessing,
                   onPayNow: () =>
-                      _handlePayPressed(total, mergedShipping, guestCheckout),
+                      _handlePayPressed(totalValue, mergedShipping, guestCheckout),
                 ),
               ],
             ),
@@ -553,6 +573,13 @@ class _CheckoutBody extends StatelessWidget {
     this.directPurchase,
     this.shippingDetails,
     required this.guestCheckout,
+    required this.subtotal,
+    required this.tax,
+    required this.total,
+    required this.totalBv,
+    required this.gstType,
+    required this.gstPercent,
+    required this.unitPrice,
     required this.onOpenAddressBook,
     required this.savedAddresses,
     required this.onSelectSavedAddress,
@@ -563,6 +590,13 @@ class _CheckoutBody extends StatelessWidget {
   final CheckoutArguments? directPurchase;
   final ShippingDetailsPayload? shippingDetails;
   final bool guestCheckout;
+  final double subtotal;
+  final double tax;
+  final double total;
+  final int totalBv;
+  final String gstType;
+  final double gstPercent;
+  final double unitPrice;
   final VoidCallback onOpenAddressBook;
   final List<StoredAddress> savedAddresses;
   final ValueChanged<StoredAddress> onSelectSavedAddress;
@@ -584,7 +618,17 @@ class _CheckoutBody extends StatelessWidget {
             onEditShipping: onEditShipping,
           ),
           const SizedBox(height: 22),
-          _OrderSummaryCard(cart: cart, directPurchase: directPurchase),
+          _OrderSummaryCard(
+            cart: cart,
+            directPurchase: directPurchase,
+            subtotal: subtotal,
+            tax: tax,
+            total: total,
+            totalBv: totalBv,
+            gstType: gstType,
+            gstPercent: gstPercent,
+            unitPrice: unitPrice,
+          ),
         ],
       ),
     );
@@ -841,10 +885,27 @@ class _ShippingSection extends StatelessWidget {
 }
 
 class _OrderSummaryCard extends StatelessWidget {
-  const _OrderSummaryCard({required this.cart, this.directPurchase});
+  const _OrderSummaryCard({
+    required this.cart,
+    this.directPurchase,
+    required this.subtotal,
+    required this.tax,
+    required this.total,
+    required this.totalBv,
+    required this.gstType,
+    required this.gstPercent,
+    required this.unitPrice,
+  });
 
   final CartState cart;
   final CheckoutArguments? directPurchase;
+  final double subtotal;
+  final double tax;
+  final double total;
+  final int totalBv;
+  final String gstType;
+  final double gstPercent;
+  final double unitPrice;
 
   @override
   Widget build(BuildContext context) {
@@ -854,20 +915,15 @@ class _OrderSummaryCard extends StatelessWidget {
     final card = isDark ? AppColors.darkSurface : Colors.white;
     final border = isDark ? const Color(0xFF2A3A52) : const Color(0xFFE2E8F0);
     final muted = cs.onSurface.withValues(alpha: 0.62);
-    final isDirect = directPurchase != null;
-    final quantity = isDirect ? directPurchase!.quantity : cart.items.length;
+
+    final quantity = directPurchase != null 
+        ? directPurchase!.quantity 
+        : cart.items.where((i) => i.isSelected).length;
     final itemLabel = '$quantity ${quantity == 1 ? 'Item' : 'Items'}';
-    final subtotal = isDirect
-        ? directPurchase!.product.price * directPurchase!.quantity
-        : cart.subtotal;
-    final shipping = isDirect
-        ? directPurchase!.product.shippingCharge * directPurchase!.quantity
-        : cart.items.fold(0.0, (sum, item) => sum + item.totalShipping);
-    final totalBv = isDirect
-        ? directPurchase!.product.bv * directPurchase!.quantity
-        : cart.totalBv;
-    final tax = isDirect ? subtotal * cart.taxRate : cart.tax;
-    final total = subtotal + shipping + tax;
+    final isDirect = directPurchase != null;
+    final shippingDetails = context.findAncestorWidgetOfExactType<_CheckoutBody>()?.shippingDetails;
+    final country = shippingDetails?.country ?? 'India';
+    final state = shippingDetails?.state ?? 'Haryana';
 
     String format(double value) => '₹${value.toStringAsFixed(2)}';
 
@@ -1014,7 +1070,7 @@ class _OrderSummaryCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Qty ${directPurchase!.quantity} · ${format(directPurchase!.product.price)} each',
+                        'Qty ${directPurchase!.quantity} · ${format(unitPrice)} each',
                         style: theme.textTheme.bodySmall?.copyWith(
                           fontSize: 10.5,
                           color: muted,
@@ -1034,23 +1090,16 @@ class _OrderSummaryCard extends StatelessWidget {
               valueColor: cs.primary,
               valueWeight: FontWeight.w700,
             ),
+            const Divider(height: 16),
             summaryRow('Subtotal', format(subtotal)),
+            summaryRow(gstType, format(tax), valueColor: AppColors.mlmGreen),
+            const Divider(height: 24),
             summaryRow(
-              'Shipping',
-              shipping > 0 ? format(shipping) : 'Free',
-              valueColor:
-                  shipping > 0 ? null : AppColors.mlmGreen,
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 10),
-              child: Divider(height: 1, thickness: 1, color: border),
-            ),
-            summaryRow(
-              'Total Price',
-              format(total),
-              valueColor: cs.primary,
+              'Total Payable', 
+              format(total), 
+              valueColor: cs.primary, 
               valueWeight: FontWeight.w800,
-              labelSize: 11.5,
+              labelSize: 13,
               valueSize: 15,
             ),
             const SizedBox(height: 12),
@@ -1074,7 +1123,7 @@ class _OrderSummaryCard extends StatelessWidget {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'All prices include GST and applicable taxes',
+                      'GST calculated based on shipping address: $state, $country',
                       style: theme.textTheme.bodySmall?.copyWith(
                         fontSize: 10,
                         fontWeight: FontWeight.w700,
@@ -1198,6 +1247,7 @@ class _CheckoutFooter extends StatelessWidget {
                               fontWeight: FontWeight.w800,
                               fontSize: 12,
                               letterSpacing: 0.2,
+                              color: Colors.white,
                             ),
                           ),
                 ),
@@ -1239,6 +1289,8 @@ class _CheckoutFooter extends StatelessWidget {
 class _MockOrderButton extends StatelessWidget {
   const _MockOrderButton({
     required this.total,
+    required this.tax,
+    required this.unitPrice,
     this.directPurchase,
     required this.cart,
     this.shippingDetails,
@@ -1246,6 +1298,8 @@ class _MockOrderButton extends StatelessWidget {
   });
 
   final double total;
+  final double tax;
+  final double unitPrice;
   final CheckoutArguments? directPurchase;
   final CartState cart;
   final ShippingDetailsPayload? shippingDetails;
@@ -1255,27 +1309,33 @@ class _MockOrderButton extends StatelessWidget {
     try {
       debugPrint('Mock Order: Creating test order...');
 
+      final country = shippingDetails?.country ?? 'India';
+      final state = shippingDetails?.state ?? 'Haryana';
+
       // Prepare order data
       final Map<String, dynamic> orderData = {
         'total_amount': total,
+        'tax_amount': tax, // Added tax/GST amount
+        'base_subtotal': total - tax, // Added base subtotal
         'items': directPurchase != null
             ? [
                 {
                   'product_id': directPurchase!.product.id,
                   'product_name': directPurchase!.product.title,
                   'quantity': directPurchase!.quantity,
-                  'price': directPurchase!.product.price,
+                  'price': unitPrice, // Dynamic price
                   'bv': directPurchase!.product.bv,
                   'total_bv':
                       directPurchase!.product.bv * directPurchase!.quantity,
                 }
               ]
             : cart.items
+                .where((i) => i.isSelected)
                 .map((item) => {
                       'product_id': item.product.id,
                       'product_name': item.product.title,
                       'quantity': item.quantity,
-                      'price': item.product.price,
+                      'price': item.unitPrice(country, state), // Dynamic price
                       'bv': item.product.bv,
                       'total_bv': item.product.bv * item.quantity,
                     })
@@ -1493,14 +1553,21 @@ Future<void> _sendOrderWhatsApp({
   required ShippingDetailsPayload? shippingDetails,
   required CheckoutArguments? directPurchase,
 }) async {
-  final subtotal = directPurchase != null
-      ? directPurchase.product.price * directPurchase.quantity
-      : cart.subtotal;
-  final shipping = directPurchase != null
-      ? directPurchase.product.shippingCharge * directPurchase.quantity
-      : cart.items.fold(0.0, (sum, item) => sum + item.totalShipping);
-  final tax = directPurchase != null ? subtotal * cart.taxRate : cart.tax;
-  final total = subtotal + shipping + tax;
+  final country = shippingDetails?.country ?? 'India';
+  final state = shippingDetails?.state ?? 'Haryana';
+
+  double subtotal = 0;
+  double tax = 0;
+
+  if (directPurchase != null) {
+    final data = directPurchase.product.calculateDynamicPrice(country, state);
+    subtotal = (data['basePrice'] as double) * directPurchase.quantity;
+    tax = (data['gstAmount'] as double) * directPurchase.quantity;
+  } else {
+    subtotal = cart.selectedSubtotal(country, state);
+    tax = cart.selectedTax(country, state);
+  }
+  final total = subtotal + tax;
 
   String itemsText = '';
   if (directPurchase != null) {
@@ -1518,7 +1585,7 @@ Future<void> _sendOrderWhatsApp({
     customerInfo += 'Name: ${shippingDetails.fullName}\n';
     customerInfo += 'Phone: ${shippingDetails.primaryPhone}\n';
     customerInfo +=
-        'Address: ${shippingDetails.shippingAddress}, ${shippingDetails.city}, ${shippingDetails.state} - ${shippingDetails.zipCode}';
+        'Address: ${shippingDetails.shippingAddress}, ${shippingDetails.city}, ${shippingDetails.state}, ${shippingDetails.country} - ${shippingDetails.zipCode}';
   } else {
     customerInfo += 'Name: Guest User';
   }

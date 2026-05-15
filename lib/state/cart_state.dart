@@ -8,7 +8,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/product.dart';
 import '../utils/media_url.dart';
+import '../services/location_service.dart';
 import 'profile_state.dart';
+import 'location_state.dart';
 
 class CartItem {
   CartItem({required this.product, this.quantity = 1}) : assert(quantity > 0);
@@ -17,13 +19,29 @@ class CartItem {
   int quantity;
   bool isSelected = true; // Default to selected
 
-  double get totalPrice => product.price * quantity;
+  double unitPrice([String? country, String? state]) {
+    final data = product.calculateDynamicPrice(country ?? 'India', state ?? 'Haryana');
+    return data['finalPrice'] as double;
+  }
+
+  double totalPrice([String? country, String? state]) {
+    final data = product.calculateDynamicPrice(country ?? 'India', state ?? 'Haryana');
+    return (data['finalPrice'] as double) * quantity;
+  }
+
   double get totalShipping => product.shippingCharge * quantity;
   int get totalBv => product.bv * quantity;
   
   // GST calculations
-  double get totalGst => product.gstAmount * quantity;
-  double get priceBeforeGst => product.priceBeforeGst * quantity;
+  double totalGst([String? country, String? state]) {
+    final data = product.calculateDynamicPrice(country ?? 'India', state ?? 'Haryana');
+    return (data['gstAmount'] as double) * quantity;
+  }
+
+  double priceBeforeGst([String? country, String? state]) {
+    final data = product.calculateDynamicPrice(country ?? 'India', state ?? 'Haryana');
+    return (data['basePrice'] as double) * quantity;
+  }
   
   // Debug GST in cart
   void debugCartGst() {
@@ -81,6 +99,11 @@ class CartItem {
       'bv': product.bv,
       'description': product.description,
       'shippingCharge': product.shippingCharge,
+      'gstPercent': product.gstPercent,
+      'sgstPercent': product.sgstPercent,
+      'cgstPercent': product.cgstPercent,
+      'igstPercent': product.igstPercent,
+      'basePrice': product.basePrice,
       'stock': product.stock,
       'weight': product.weight,
       'weightUnit': product.weightUnit,
@@ -106,6 +129,11 @@ class CartItem {
 
     final price = (data['price'] as num?)?.toDouble() ?? 0;
     final totalPrice = (data['totalPrice'] as num?)?.toDouble() ?? price;
+    final gstPercent = (data['gstPercent'] as num?)?.toDouble() ?? 0.0;
+    final sgstPercent = (data['sgstPercent'] as num?)?.toDouble() ?? 0.0;
+    final cgstPercent = (data['cgstPercent'] as num?)?.toDouble() ?? 0.0;
+    final igstPercent = (data['igstPercent'] as num?)?.toDouble() ?? 0.0;
+    final basePrice = (data['basePrice'] as num?)?.toDouble() ?? 0.0;
 
     return Product(
       id: data['id']?.toString() ?? '',
@@ -116,6 +144,11 @@ class CartItem {
       bv: (data['bv'] as num?)?.toInt() ?? 0,
       description: data['description'] as String? ?? '',
       shippingCharge: (data['shippingCharge'] as num?)?.toDouble() ?? 0.0,
+      gstPercent: gstPercent,
+      sgstPercent: sgstPercent,
+      cgstPercent: cgstPercent,
+      igstPercent: igstPercent,
+      basePrice: basePrice,
       images: images,
       stock: (data['stock'] as num?)?.toInt() ?? 0,
       weight: (data['weight'] as num?)?.toDouble() ?? 0,
@@ -127,12 +160,12 @@ class CartItem {
 }
 
 class CartState extends ChangeNotifier {
-  static const double _taxRate = 0.08; // 8% tax
   static const String _storageKey = 'cart_state_items';
 
   final Map<String, CartItem> _items = {};
 
-  CartState({required ProfileState profile}) : _profile = profile {
+  CartState({required ProfileState profile}) 
+      : _profile = profile {
     _cachedAuthSegment = _profile.isAuthenticated;
     _profile.addListener(_onProfileAuthChanged);
     print('=== CART STATE INIT DEBUG ===');
@@ -166,35 +199,29 @@ class CartState extends ChangeNotifier {
   int get totalItems =>
       _items.values.fold(0, (sum, item) => sum + item.quantity);
 
-  double get subtotal =>
-      _items.values.fold(0.0, (sum, item) => sum + item.totalPrice);
+  double subtotal([String? country, String? state]) =>
+      _items.values.fold(0.0, (sum, item) => sum + item.priceBeforeGst(country, state));
   double get shippingTotal =>
       _items.values.fold(0.0, (sum, item) => sum + item.totalShipping);
-  double get tax => subtotal * _taxRate;
-  double get total => subtotal + tax + shippingTotal;
+  double tax([String? country, String? state]) =>
+      _items.values.fold(0.0, (sum, item) => sum + item.totalGst(country, state));
+  double total([String? country, String? state]) => subtotal(country, state) + tax(country, state);
 
-  double get taxRate => _taxRate;
   int get totalBv => _items.values.fold(0, (sum, item) => sum + item.totalBv);
 
   // Selection related getters
-  double get selectedSubtotal => _items.values
+  double selectedSubtotal([String? country, String? state]) => _items.values
       .where((item) => item.isSelected)
-      .fold(0.0, (sum, item) => sum + item.totalPrice);
-  double get selectedTax => selectedSubtotal * _taxRate;
+      .fold(0.0, (sum, item) => sum + item.priceBeforeGst(country, state));
+  double selectedTax([String? country, String? state]) => _items.values
+      .where((item) => item.isSelected)
+      .fold(0.0, (sum, item) => sum + item.totalGst(country, state));
   double get selectedShippingTotal => _items.values
       .where((item) => item.isSelected)
       .fold(0.0, (sum, item) => sum + item.totalShipping);
-  double get selectedTotalGst => _items.values
-      .where((item) => item.isSelected)
-      .fold(0.0, (sum, item) {
-        print('DEBUG: Processing item ${item.product.title} with GST ${item.product.gstPercent} and amount ${item.totalGst}');
-        return sum + item.totalGst;
-      });
-  double get selectedPriceBeforeGst => _items.values
-      .where((item) => item.isSelected)
-      .fold(0.0, (sum, item) => sum + item.priceBeforeGst);
-  double get selectedTotal =>
-      selectedSubtotal + selectedTax + selectedShippingTotal;
+  double selectedTotalGst([String? country, String? state]) => selectedTax(country, state);
+  double selectedPriceBeforeGst([String? country, String? state]) => selectedSubtotal(country, state);
+  double selectedTotal([String? country, String? state]) => selectedSubtotal(country, state) + selectedTax(country, state);
 
   int get selectedTotalBv => _items.values
       .where((item) => item.isSelected)
@@ -210,7 +237,10 @@ class CartState extends ChangeNotifier {
     if (existing != null) {
       existing.quantity += addQty;
     } else {
-      _items[product.id] = CartItem(product: product, quantity: addQty);
+      _items[product.id] = CartItem(
+        product: product, 
+        quantity: addQty,
+      );
     }
     
     // Debug GST when adding product
@@ -308,7 +338,12 @@ class CartState extends ChangeNotifier {
         try {
           final item = CartItem.fromJson(value);
           if (item.product.id.isEmpty) return;
-          _items[key] = item;
+          
+          // Create new item
+          _items[key] = CartItem(
+            product: item.product,
+            quantity: item.quantity,
+          );
         } catch (error) {
           debugPrint('Failed to parse cart item $key: $error');
         }

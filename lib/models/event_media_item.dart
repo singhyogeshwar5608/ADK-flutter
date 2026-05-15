@@ -68,7 +68,20 @@ class EventMediaItem {
   final Map<String, dynamic>? meta;
   final DateTime? uploadedAt;
 
-  bool get isVideo => mediaType == EventMediaType.video;
+  bool get isVideo {
+    if (mediaType == EventMediaType.video) return true;
+    
+    final url = fileUrl.toLowerCase();
+    if (url.endsWith('.mp4') || url.endsWith('.mov') || url.endsWith('.avi') || url.endsWith('.mkv')) {
+      return true;
+    }
+    
+    if (mimeType?.toLowerCase().startsWith('video/') == true) {
+      return true;
+    }
+    
+    return false;
+  }
 
   String get categoryLabel {
     final raw = meta?["category"];
