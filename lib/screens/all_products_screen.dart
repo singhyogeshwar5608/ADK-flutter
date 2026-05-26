@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../models/product_entry.dart';
 import '../state/product_catalog_state.dart';
+import '../state/profile_state.dart';
 import '../widgets/product_card.dart';
 import 'cart_screen.dart';
 import 'profile_screen.dart';
@@ -636,8 +637,16 @@ class _AllProductsScreenState extends State<AllProductsScreen> {
   RangeValues _priceRange = const RangeValues(0, 10000);
 
   List<ProductCatalogEntry> _applyFilters(List<ProductCatalogEntry> entries) {
+    final profileState = ProfileProvider.of(context, listen: false);
+    final isPartner = profileState.isAuthenticated && profileState.data.partnerId.trim().isNotEmpty;
+
     final searchQuery = _searchController.text.trim().toLowerCase();
     return entries.where((entry) {
+      // 1. MLM Filtering: Hide MLM products for normal users
+      if (entry.product.isMlm && !isPartner) {
+        return false;
+      }
+
       final price = entry.product.price;
       final matchesPrice =
           price >= _priceRange.start && price <= _priceRange.end;
@@ -689,7 +698,13 @@ class _AllProductsScreenState extends State<AllProductsScreen> {
     final theme = Theme.of(context);
     final catalogState = ProductCatalogProvider.of(context);
     final sourceEntries = catalogState.entries;
-    final entries = _applyFilters(sourceEntries);
+
+    // Filter by isMlm for the current user
+    final profileState = ProfileProvider.of(context);
+    final isPartner = profileState.isAuthenticated && profileState.data.partnerId.trim().isNotEmpty;
+    final baseEntries = sourceEntries.where((e) => !e.product.isMlm || isPartner).toList();
+
+    final entries = _applyFilters(baseEntries);
     final isLoading = catalogState.isLoading && sourceEntries.isEmpty;
 
     return Scaffold(
@@ -716,7 +731,7 @@ class _AllProductsScreenState extends State<AllProductsScreen> {
                   padding: const EdgeInsets.only(right: 10),
                   child: IconButton(
                     icon: const Icon(Icons.tune),
-                    onPressed: () => _openFilterSheet(sourceEntries),
+                    onPressed: () => _openFilterSheet(baseEntries),
                   ),
                 ),
               ],

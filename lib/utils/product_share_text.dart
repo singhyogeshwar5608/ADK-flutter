@@ -5,6 +5,11 @@ String formatProductShareText(Product product) {
   buf.writeln(product.title);
   buf.writeln('Price: ₹${product.price.toStringAsFixed(2)}');
   buf.writeln('BV: ${product.bv}');
+  
+  // Add deep link for product
+  final productLink = 'https://master.d1yeg5lmbstgw1.amplifyapp.com/members/product/${product.id}';
+  buf.writeln('\nView Product: $productLink');
+
   final d = product.description.trim();
   if (d.isNotEmpty) {
     buf.writeln();

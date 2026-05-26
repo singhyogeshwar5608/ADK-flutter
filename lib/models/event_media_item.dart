@@ -69,10 +69,25 @@ class EventMediaItem {
   final DateTime? uploadedAt;
 
   bool get isVideo {
+    // If mediaType is explicitly set to video, respect it
     if (mediaType == EventMediaType.video) return true;
     
     final url = fileUrl.toLowerCase();
-    if (url.endsWith('.mp4') || url.endsWith('.mov') || url.endsWith('.avi') || url.endsWith('.mkv')) {
+    
+    // Direct file extensions
+    if (url.endsWith('.mp4') || url.endsWith('.mov') || url.endsWith('.avi') || 
+        url.endsWith('.mkv') || url.endsWith('.webm') || url.endsWith('.3gp') ||
+        url.contains('.mp4?') || url.contains('.m3u8')) {
+      return true;
+    }
+    
+    // External video platforms
+    if (isExternalVideo) {
+      return true;
+    }
+    
+    // Check for video markers in URL if mediaType is ambiguous
+    if (url.contains('/videos/') || url.contains('/video/') || url.contains('vimeo.com')) {
       return true;
     }
     
@@ -81,6 +96,31 @@ class EventMediaItem {
     }
     
     return false;
+  }
+
+  bool get isExternalVideo {
+    final url = fileUrl.toLowerCase();
+    return url.contains('youtube.com') || url.contains('youtu.be') || 
+           url.contains('facebook.com') || url.contains('fb.watch') ||
+           url.contains('vimeo.com') || url.contains('instagram.com/reels/') ||
+           url.contains('instagram.com/tv/');
+  }
+
+  bool get isYouTube => fileUrl.toLowerCase().contains('youtube.com') || fileUrl.toLowerCase().contains('youtu.be');
+  bool get isFacebook => fileUrl.toLowerCase().contains('facebook.com') || fileUrl.toLowerCase().contains('fb.watch');
+
+  String? get youtubeThumbnail {
+    if (!isYouTube) return null;
+    final regExp = RegExp(
+      r'^.*((youtu.be\/)|(v\/)|(\/u\/\w\/)|(embed\/)|(watch\?))\??v?=?([^#&?]*).*',
+      caseSensitive: false,
+    );
+    final match = regExp.firstMatch(fileUrl);
+    if (match != null && match.group(7) != null && match.group(7)!.length == 11) {
+      final videoId = match.group(7)!;
+      return 'https://img.youtube.com/vi/$videoId/0.jpg';
+    }
+    return null;
   }
 
   String get categoryLabel {

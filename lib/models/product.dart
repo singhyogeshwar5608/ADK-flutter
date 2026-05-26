@@ -22,6 +22,8 @@ class Product {
     this.stock = 0,
     this.weight = 0,
     this.weightUnit = 'g',
+    this.isComingSoon = false,
+    this.isMlm = false,
   }) : assert(price <= totalPrice, 'Actual price cannot exceed total price');
 
   final String id;
@@ -45,6 +47,10 @@ class Product {
   final double weight;
   /// e.g. g, kg (from API `weightUnit`).
   final String weightUnit;
+  /// Whether the product is tagged as "Coming Soon" (from API `is_coming_soon`).
+  final bool isComingSoon;
+  /// Whether the product is restricted to MLM members (from API `is_mlm`).
+  final bool isMlm;
 
   factory Product.fromJson(Map<String, dynamic> json) {
     // Helper to find the first non-zero price value from a list of possible keys
@@ -192,7 +198,19 @@ class Product {
       stock: _parseStock(json['stock'] ?? json['inventory']),
       weight: _parseDouble(json['weight'] ?? json['net_weight']),
       weightUnit: _parseWeightUnit(json['weightUnit'] ?? json['weight_unit']),
+      isComingSoon: _parseBool(json['is_coming_soon'] ?? json['isComingSoon']),
+      isMlm: _parseBool(json['is_mlm'] ?? json['isMlm']),
     );
+  }
+
+  static bool _parseBool(dynamic value) {
+    if (value is bool) return value;
+    if (value is num) return value == 1;
+    if (value is String) {
+      final s = value.toLowerCase().trim();
+      return s == 'true' || s == '1' || s == 'yes';
+    }
+    return false;
   }
 
   /// Calculates dynamic price and GST details based on location.
@@ -256,6 +274,8 @@ class Product {
     int? stock,
     double? weight,
     String? weightUnit,
+    bool? isComingSoon,
+    bool? isMlm,
   }) {
     return Product(
       id: id ?? this.id,
@@ -271,6 +291,8 @@ class Product {
       stock: stock ?? this.stock,
       weight: weight ?? this.weight,
       weightUnit: weightUnit ?? this.weightUnit,
+      isComingSoon: isComingSoon ?? this.isComingSoon,
+      isMlm: isMlm ?? this.isMlm,
     );
   }
 
@@ -288,6 +310,8 @@ class Product {
       'stock': stock,
       'weight': weight,
       'weightUnit': weightUnit,
+      'is_coming_soon': isComingSoon,
+      'is_mlm': isMlm,
       'images': images.map((image) => image.toJson()).toList(),
     };
   }

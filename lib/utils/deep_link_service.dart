@@ -2,10 +2,14 @@ import 'dart:async';
 
 import 'package:app_links/app_links.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 
+import '../screens/product_details_screen.dart';
 import '../screens/signup_screen.dart';
 import '../screens/wishlist_screen.dart';
+import '../state/product_catalog_state.dart';
+import '../services/api_client.dart';
+import '../models/product.dart';
 
 class DeepLinkService {
   DeepLinkService(this._navigatorKey);
@@ -17,17 +21,22 @@ class DeepLinkService {
   Future<void> start() async {
     if (kIsWeb) return;
 
-    // Initial link (cold start).
-    final initial = await _appLinks.getInitialLink();
-    if (initial != null) {
-      _handleUri(initial);
-    }
-
-    // Runtime links.
+    // Runtime links stream setup first.
     _sub = _appLinks.uriLinkStream.listen(_handleUri, onError: (e, stack) {
       debugPrint('DeepLinkService uriLinkStream error: $e');
       debugPrintStack(stackTrace: stack);
     });
+
+    // Initial link (cold start) - Wait for Navigator to be ready.
+    final initial = await _appLinks.getInitialLink();
+    if (initial != null) {
+      debugPrint('DeepLinkService: Initial link found: $initial');
+      // Give the app some time to mount the home screen and navigator
+      Future.delayed(const Duration(milliseconds: 1500), () {
+        debugPrint('DeepLinkService: Processing initial link after delay');
+        _handleUri(initial);
+      });
+    }
   }
 
   void dispose() {
@@ -130,21 +139,49 @@ class DeepLinkService {
     // Handle HTTPS deep links (fallback for direct web links)
     debugPrint('Handling HTTPS deep link');
 
-    // Handle wishlist share deep links: https://aslidesikisan.netlify.app/w/TOKEN
-    if (path.startsWith('/w/')) {
-      debugPrint('Wishlist HTTPS flow detected');
+    // Remove /members prefix if present (Amplify domain structure)
+    String effectivePath = path;
+    if (path.startsWith('/members/')) {
+      effectivePath = path.substring(8); // Remove '/members'
+    } else if (path == '/members') {
+      effectivePath = '/';
+    }
+
+    // Handle wishlist share deep links: 
+    // - https://master.d1yeg5lmbstgw1.amplifyapp.com/members/wishlist/TOKEN
+    // - https://master.d1yeg5lmbstgw1.amplifyapp.com/members/w/TOKEN
+    // - https://www.offerlifetime.com/wishlist/TOKEN
+    // - https://www.offerlifetime.com/w/TOKEN
+    final isWishlistLong = effectivePath.startsWith('/wishlist/');
+    final isWishlistShort = effectivePath.startsWith('/w/');
+
+    if (isWishlistLong || isWishlistShort) {
+      debugPrint('Wishlist HTTPS flow detected (Path: $path, Effective: $effectivePath)');
 
       final nav = _navigatorKey.currentState;
       if (nav == null) {
-        debugPrint('Navigator is null, cannot navigate');
+        debugPrint('Navigation Status: FAILED (Navigator is null)');
         return;
       }
 
-      // Extract token from path /w/TOKEN
-      final token = path.substring(3); // Remove '/w/' prefix
-      debugPrint('Extracted token: $token');
+      // Extract token from effective path
+      String token = '';
+      if (isWishlistLong) {
+        token = effectivePath.substring(10); // Remove '/wishlist/' prefix
+      } else {
+        token = effectivePath.substring(3); // Remove '/w/' prefix
+      }
+      
+      token = token.trim();
+      debugPrint('Extracted Token: $token');
+
+      if (token.isEmpty) {
+        debugPrint('Navigation Status: SKIPPED (Token is empty)');
+        return;
+      }
 
       // Navigate to wishlist screen with token
+      debugPrint('Navigation Status: SUCCESS (Navigating to WishlistScreen)');
       nav.pushNamedAndRemoveUntil(
         WishlistScreen.routeName,
         (route) => route.isFirst,
@@ -153,15 +190,42 @@ class DeepLinkService {
       return;
     }
 
-    // Handle signup deep links:
-    // - https://aslidesikisan.netlify.app/signup?ref=CODE&leg=LEFT
-    // - https://www.offerlifetime.com/signup?ref=CODE&leg=LEFT
-    if (!path.endsWith('/signup') && path != '/signup') {
-      debugPrint('Not a signup path, ignoring');
+    // Handle product detail deep links:
+    // - https://master.d1yeg5lmbstgw1.amplifyapp.com/members/product/ID
+    // - https://www.offerlifetime.com/product/ID
+    final isProductLink = effectivePath.contains('/product/');
+    if (isProductLink) {
+      debugPrint('Product HTTPS flow detected (Effective: $effectivePath)');
+      final productId = effectivePath.split('/').last.trim();
+      if (productId.isEmpty) return;
+
+      debugPrint('Navigation Status: SUCCESS (Navigating to Product Loader for ID: $productId)');
+      final nav = _navigatorKey.currentState;
+      if (nav == null) return;
+
+      nav.pushNamedAndRemoveUntil(
+        '/', // Go to home first
+        (route) => false,
+      );
+      
+      // Use the named route that onGenerateRoute handles
+      nav.pushNamed('/product/$productId');
       return;
     }
 
-    debugPrint('Signup HTTPS flow detected');
+    // Handle signup deep links:
+    _handleSignupDeepLink(uri, effectivePath);
+  }
+
+  void _handleSignupDeepLink(Uri uri, String effectivePath) {
+    // - https://master.d1yeg5lmbstgw1.amplifyapp.com/members/signup?ref=CODE&leg=LEFT
+    // - https://www.offerlifetime.com/signup?ref=CODE&leg=LEFT
+    if (!effectivePath.endsWith('/signup') && effectivePath != '/signup') {
+      debugPrint('Not a signup path, ignoring (Effective: $effectivePath)');
+      return;
+    }
+
+    debugPrint('Signup HTTPS flow detected (Effective: $effectivePath)');
 
     final ref = (uri.queryParameters['ref'] ??
             uri.queryParameters['referral_code'] ??

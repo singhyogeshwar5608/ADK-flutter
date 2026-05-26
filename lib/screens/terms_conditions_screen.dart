@@ -140,7 +140,7 @@ class TermsConditionsScreen extends StatelessWidget {
                         'For account deletion, terms-related questions, or complaints, contact us at ',
                   ),
                   TextSpan(
-                    text: 'support@aslidesikisan.com',
+                    text: 'support@offerlifetime.com',
                     style: body().copyWith(
                       color: AppColors.mlmGreen,
                       fontWeight: FontWeight.w600,

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -8,11 +9,15 @@ import '../state/cart_state.dart';
 import '../state/profile_state.dart';
 import '../state/wishlist_state.dart';
 import '../widgets/safe_network_image.dart';
+import '../utils/wishlist_share_params.dart';
 
-class WishlistScreen extends StatelessWidget {
+class WishlistScreen extends StatefulWidget {
   const WishlistScreen({super.key});
 
   static const routeName = '/wishlist';
+
+  @override
+  State<WishlistScreen> createState() => _WishlistScreenState();
 
   static Future<void> shareItems(BuildContext context, List<Product> items) async {
     if (items.isEmpty) {
@@ -22,14 +27,11 @@ class WishlistScreen extends StatelessWidget {
       return;
     }
 
-    // Generate token for wishlist sharing
-    final profile = ProfileProvider.of(context, listen: false).data;
-    final userId = profile.partnerId.trim().isEmpty ? 'guest' : profile.partnerId.trim();
-    final timestamp = DateTime.now().millisecondsSinceEpoch;
-    final token = '$userId-$timestamp'; // Simple token generation (in production, use backend API)
+    // Force always using v- prefix for shared links to ensure local filtering by IDs
+    final String token = 'v-${items.map((p) => p.id.toString()).join(',')}';
 
     // Generate HTTPS deep link for wishlist
-    final wishlistLink = 'https://aslidesikisan.netlify.app/w/$token';
+    final wishlistLink = 'https://master.d1yeg5lmbstgw1.amplifyapp.com/members/wishlist/$token';
 
     // Create share text with link
     final buffer = StringBuffer('My wishlist (${items.length} items)\n\n');
@@ -44,90 +46,19 @@ class WishlistScreen extends StatelessWidget {
     await Share.share(buffer.toString(), subject: 'My wishlist');
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final wishlistState = WishlistProvider.of(context);
-    final favorites = wishlistState.items;
-
-    return Scaffold(
-      backgroundColor: theme.colorScheme.surface,
-      appBar: AppBar(
-        centerTitle: true,
-        title: const Text('Wishlist'),
-        actions: [
-          if (favorites.isNotEmpty)
-            TextButton(
-              onPressed: () => _promptClearWishlist(context),
-              child: Text(
-                'Clear all',
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.primary,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13,
-                ),
-              ),
-            ),
-          IconButton(
-            tooltip: 'Share wishlist',
-            icon: const Icon(Icons.share_outlined),
-            onPressed: () async {
-              final items =
-                  WishlistProvider.of(context, listen: false).items;
-              await shareItems(context, items);
-            },
-          ),
-        ],
+  static Widget _buildDismissBackground(BuildContext context, bool isLeft) {
+    return Container(
+      alignment: isLeft ? Alignment.centerLeft : Alignment.centerRight,
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      decoration: BoxDecoration(
+        color: isLeft ? Colors.redAccent : AppColors.primary,
+        borderRadius: BorderRadius.circular(18),
       ),
-      body: favorites.isEmpty
-          ? _EmptyWishlist(theme: theme)
-          : ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: favorites.length,
-              itemBuilder: (context, index) {
-                final product = favorites[index];
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 16),
-                  child: Dismissible(
-                    key: ValueKey(product.id),
-                    background: _buildDismissBackground(context, true),
-                    secondaryBackground: _buildDismissBackground(context, false),
-                    onDismissed: (direction) {
-                      final wishlist = WishlistProvider.of(context, listen: false);
-                      final cart = CartProvider.of(context, listen: false);
-                      if (direction == DismissDirection.endToStart) {
-                        cart.addProduct(product);
-                        ScaffoldMessenger.of(context)
-                          ..hideCurrentSnackBar()
-                          ..showSnackBar(
-                            const SnackBar(
-                              behavior: SnackBarBehavior.floating,
-                              content: Text(
-                                  'This item has been moved to your cart.'),
-                            ),
-                          );
-                      } else {
-                        ScaffoldMessenger.of(context)
-                          ..hideCurrentSnackBar()
-                          ..showSnackBar(
-                            SnackBar(content: Text('${product.title} removed from wishlist')),
-                          );
-                      }
-                      wishlist.remove(product.id);
-                    },
-                    child: _WishlistCard(
-                      product: product,
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => ProductDetailsScreen(product: product),
-                        ),
-                      ),
-                      onRemove: () => _promptRemoveWishlistItem(context, product),
-                    ),
-                  ),
-                );
-              },
-            ),
+      child: Icon(
+        isLeft ? Icons.delete_outline : Icons.shopping_cart,
+        color: Colors.white,
+        size: 24,
+      ),
     );
   }
 
@@ -201,19 +132,148 @@ class WishlistScreen extends StatelessWidget {
       ),
     );
   }
+}
 
-  Widget _buildDismissBackground(BuildContext context, bool isLeft) {
-    return Container(
-      alignment: isLeft ? Alignment.centerLeft : Alignment.centerRight,
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      decoration: BoxDecoration(
-        color: isLeft ? Colors.redAccent : AppColors.primary,
-        borderRadius: BorderRadius.circular(18),
-      ),
-      child: Icon(
-        isLeft ? Icons.delete_outline : Icons.shopping_cart,
-        color: Colors.white,
-        size: 24,
+class _WishlistScreenState extends State<WishlistScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _handleArguments();
+    });
+  }
+
+  void _handleArguments() {
+    final args = ModalRoute.of(context)?.settings.arguments;
+    String? token;
+
+    if (args is Map<String, dynamic> && args.containsKey('token')) {
+      token = args['token'] as String;
+    } else if (kIsWeb) {
+      token = parseWishlistTokenFromUrl();
+    }
+
+    if (token != null && token.isNotEmpty) {
+      WishlistProvider.of(context, listen: false).loadSharedWishlist(token);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final wishlistState = WishlistProvider.of(context);
+    final favorites = wishlistState.items;
+    final isSharedMode = wishlistState.isSharedMode;
+
+    return PopScope(
+      canPop: true,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop && isSharedMode) {
+          wishlistState.exitSharedMode();
+        }
+      },
+      child: Scaffold(
+        backgroundColor: theme.colorScheme.surface,
+        appBar: AppBar(
+          centerTitle: true,
+          title: Text(isSharedMode ? 'Shared Wishlist' : 'Wishlist'),
+          leading: isSharedMode 
+            ? IconButton(
+                icon: const Icon(Icons.close),
+                onPressed: () {
+                  wishlistState.exitSharedMode();
+                  if (Navigator.of(context).canPop()) {
+                    Navigator.of(context).pop();
+                  }
+                },
+              )
+            : null,
+          actions: [
+            if (!isSharedMode && favorites.isNotEmpty)
+              TextButton(
+                onPressed: () => WishlistScreen._promptClearWishlist(context),
+                child: Text(
+                  'Clear all',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.primary,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+            if (!isSharedMode)
+              IconButton(
+                tooltip: 'Share wishlist',
+                icon: const Icon(Icons.share_outlined),
+                onPressed: () async {
+                  final items =
+                      WishlistProvider.of(context, listen: false).items;
+                  await WishlistScreen.shareItems(context, items);
+                },
+              ),
+          ],
+        ),
+        body: wishlistState.isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : favorites.isEmpty
+                ? _EmptyWishlist(theme: theme)
+                : ListView.builder(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: favorites.length,
+                    itemBuilder: (context, index) {
+                      final product = favorites[index];
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 16),
+                        child: isSharedMode
+                          ? _WishlistCard(
+                              product: product,
+                              onTap: () => Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => ProductDetailsScreen(product: product),
+                                ),
+                              ),
+                              onRemove: null,
+                            )
+                          : Dismissible(
+                              key: ValueKey(product.id),
+                              background: WishlistScreen._buildDismissBackground(context, true),
+                              secondaryBackground: WishlistScreen._buildDismissBackground(context, false),
+                              onDismissed: (direction) {
+                                final wishlist = WishlistProvider.of(context, listen: false);
+                                final cart = CartProvider.of(context, listen: false);
+                                if (direction == DismissDirection.endToStart) {
+                                  cart.addProduct(product);
+                                  ScaffoldMessenger.of(context)
+                                    ..hideCurrentSnackBar()
+                                    ..showSnackBar(
+                                      const SnackBar(
+                                        behavior: SnackBarBehavior.floating,
+                                        content: Text(
+                                            'This item has been moved to your cart.'),
+                                      ),
+                                    );
+                                } else {
+                                  ScaffoldMessenger.of(context)
+                                    ..hideCurrentSnackBar()
+                                    ..showSnackBar(
+                                      SnackBar(content: Text('${product.title} removed from wishlist')),
+                                    );
+                                }
+                                wishlist.remove(product.id);
+                              },
+                              child: _WishlistCard(
+                                product: product,
+                                onTap: () => Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) => ProductDetailsScreen(product: product),
+                                  ),
+                                ),
+                                onRemove: () => WishlistScreen._promptRemoveWishlistItem(context, product),
+                              ),
+                            ),
+                      );
+                    },
+                  ),
       ),
     );
   }
@@ -269,7 +329,7 @@ class _WishlistCard extends StatelessWidget {
 
   final Product product;
   final VoidCallback onTap;
-  final VoidCallback onRemove;
+  final VoidCallback? onRemove;
 
   @override
   Widget build(BuildContext context) {
@@ -429,21 +489,22 @@ class _WishlistCard extends StatelessWidget {
                 ),
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.only(top: 4, right: 2),
-              child: IconButton(
-                tooltip: 'Remove from wishlist',
-                icon: Icon(
-                  Icons.delete_outline_rounded,
-                  color: Colors.red.shade400,
-                  size: 22,
+            if (onRemove != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 4, right: 2),
+                child: IconButton(
+                  tooltip: 'Remove from wishlist',
+                  icon: Icon(
+                    Icons.delete_outline_rounded,
+                    color: Colors.red.shade400,
+                    size: 22,
+                  ),
+                  visualDensity: VisualDensity.compact,
+                  constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                  padding: EdgeInsets.zero,
+                  onPressed: onRemove,
                 ),
-                visualDensity: VisualDensity.compact,
-                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-                padding: EdgeInsets.zero,
-                onPressed: onRemove,
               ),
-            ),
           ],
         ),
       ),

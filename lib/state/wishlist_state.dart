@@ -22,7 +22,9 @@ class WishlistState extends ChangeNotifier {
   final ProfileState _profile;
 
   final Map<String, Product> _items = {};
+  final List<Product> _sharedItems = [];
   bool _isLoading = false;
+  bool _isSharedMode = false;
   bool _initialized = false;
   bool _cachedAuthSegment = false;
   String? _error;
@@ -30,10 +32,65 @@ class WishlistState extends ChangeNotifier {
   static const String _cacheKey = 'wishlist_device_cache_v1';
 
   UnmodifiableListView<Product> get items =>
-      UnmodifiableListView(_items.values.toList());
-  bool get isEmpty => _items.isEmpty;
+      _isSharedMode ? UnmodifiableListView(_sharedItems) : UnmodifiableListView(_items.values.toList());
+  bool get isEmpty => _isSharedMode ? _sharedItems.isEmpty : _items.isEmpty;
   bool get isLoading => _isLoading;
+  bool get isSharedMode => _isSharedMode;
   String? get error => _error;
+
+  void exitSharedMode() {
+    _isSharedMode = false;
+    _sharedItems.clear();
+    notifyListeners();
+  }
+
+  Future<void> loadSharedWishlist(String token) async {
+    _isLoading = true;
+    _isSharedMode = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      debugPrint('LOADING SHARED WISHLIST: token=$token');
+      if (token.startsWith('v-')) {
+        // Visitor/Guest mode: token contains product IDs
+        final idsStr = token.substring(2).trim();
+        final ids = idsStr.split(',').where((id) => id.isNotEmpty).toList();
+        
+        if (ids.isEmpty) {
+          _sharedItems.clear();
+        } else {
+          debugPrint('STRICT FILTER: ids=$ids');
+          // Fetch ONLY the products specified in the token
+          final entries = await _apiClient.fetchPublicProducts(ids: ids, limit: ids.length + 10);
+          
+          final idSet = ids.map((e) => e.toString().trim()).toSet();
+          final filtered = entries
+              .map((e) => e.product)
+              .where((p) => idSet.contains(p.id.toString().trim()))
+              .toList();
+          
+          debugPrint('STRICT FILTER: requested=${ids.length}, fetched=${entries.length}, matched=${filtered.length}');
+
+          _sharedItems
+            ..clear()
+            ..addAll(filtered);
+        }
+      } else {
+        // Normal mode: fetch from API (Fallback if someone has an old link)
+        final shared = await _apiClient.fetchSharedWishlist(token);
+        _sharedItems
+          ..clear()
+          ..addAll(shared);
+      }
+    } catch (e) {
+      _error = 'Failed to load shared wishlist: $e';
+      debugPrint(_error);
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
 
   void _onProfileAuthChanged() {
     final authenticated = _profile.isAuthenticated;

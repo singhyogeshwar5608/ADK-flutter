@@ -236,6 +236,11 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     _sendOrderWhatsApp(
       paymentId: paymentId,
       orderId: orderId,
+      shiprocketOrderId: null,
+      shipmentId: null,
+      awbCode: null,
+      courierName: null,
+      trackingUrl: null,
       cart: CartProvider.of(context, listen: false),
       shippingDetails: _manualShipping ??
           _prefsShipping ??
@@ -1428,6 +1433,11 @@ class _MockOrderButton extends StatelessWidget {
         _sendOrderWhatsApp(
           paymentId: 'MOCK_PAYMENT',
           orderId: responseData['order']['id'].toString(),
+          shiprocketOrderId: responseData['order']['shiprocketOrderId'] ?? responseData['order']['shiprocket_order_id'],
+          shipmentId: responseData['order']['shipmentId'] ?? responseData['order']['shipment_id'],
+          awbCode: responseData['order']['awbCode'] ?? responseData['order']['awb_code'],
+          courierName: responseData['order']['courierName'] ?? responseData['order']['courier_name'],
+          trackingUrl: responseData['order']['trackingUrl'] ?? responseData['order']['tracking_url'] ?? responseData['tracking_url'],
           cart: cart,
           shippingDetails: shippingDetails,
           directPurchase: directPurchase,
@@ -1549,6 +1559,11 @@ class _MockOrderButton extends StatelessWidget {
 Future<void> _sendOrderWhatsApp({
   required String paymentId,
   required String orderId,
+  dynamic shiprocketOrderId,
+  dynamic shipmentId,
+  dynamic awbCode,
+  dynamic courierName,
+  dynamic trackingUrl,
   required CartState cart,
   required ShippingDetailsPayload? shippingDetails,
   required CheckoutArguments? directPurchase,
@@ -1590,18 +1605,45 @@ Future<void> _sendOrderWhatsApp({
     customerInfo += 'Name: Guest User';
   }
 
+  String shiprocketInfo = '';
+  // Check if any shiprocket data is present
+  if (shiprocketOrderId != null && shiprocketOrderId.toString().isNotEmpty) {
+    shiprocketInfo += '\n\n🚀 *Shiprocket Shipping Details:*\n';
+    shiprocketInfo += 'Order ID: $shiprocketOrderId\n';
+    
+    if (shipmentId != null && shipmentId.toString().isNotEmpty) {
+      shiprocketInfo += 'Shipment ID: $shipmentId\n';
+    }
+    
+    if (awbCode != null && awbCode.toString().isNotEmpty) {
+      shiprocketInfo += 'AWB Number: $awbCode\n';
+      
+      // Hardcoded tracking link fallback if trackingUrl is missing
+      final effectiveTrackingUrl = (trackingUrl != null && trackingUrl.toString().isNotEmpty)
+          ? trackingUrl.toString()
+          : 'https://shiprocket.co/tracking/$awbCode';
+          
+      shiprocketInfo += 'Track Your Order: $effectiveTrackingUrl\n';
+    }
+    
+    if (courierName != null && courierName.toString().isNotEmpty) {
+      shiprocketInfo += 'Courier Partner: $courierName\n';
+    }
+  }
+
   final message = '''
 Hi Family farmer Store,
 
-Your Order Number #$orderId is under process.
+Your Order Number *#$orderId* is under process.
 
-Order Details:
+📦 *Order Details:*
 $itemsText
 
-Total Amount: ₹${total.toStringAsFixed(2)}
-Payment ID: $paymentId
+💰 *Total Amount:* ₹${total.toStringAsFixed(2)}
+💳 *Payment ID:* $paymentId
+$shiprocketInfo
 
-$customerInfo
+👤 *$customerInfo*
 
 Please confirm if you wish to receive the same.
 ''';
@@ -1612,8 +1654,15 @@ Please confirm if you wish to receive the same.
   // Also send to current user if phone is available
   final currentUserPhone = shippingDetails?.primaryPhone;
   if (currentUserPhone != null && currentUserPhone.isNotEmpty) {
+    String cleanPhone = currentUserPhone.replaceAll(RegExp(r'[^0-9]'), '');
+    if (cleanPhone.length == 10) {
+      cleanPhone = '91$cleanPhone';
+    } else if (cleanPhone.length == 12 && cleanPhone.startsWith('91')) {
+      // already has 91
+    }
+    
     final userMsgUrl = Uri.parse(
-        'https://wa.me/91$currentUserPhone?text=${Uri.encodeComponent(message)}');
+        'https://wa.me/$cleanPhone?text=${Uri.encodeComponent(message)}');
     if (await canLaunchUrl(userMsgUrl)) {
       await launchUrl(userMsgUrl, mode: LaunchMode.externalApplication);
     }

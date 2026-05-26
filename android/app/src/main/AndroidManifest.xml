@@ -6,7 +6,8 @@
     <application
         android:label="ADK"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:usesCleartextTraffic="true">
 
         <activity
             android:name=".MainActivity"
@@ -46,63 +47,35 @@
             </intent-filter>
 
             <!-- ===================================================== -->
-            <!-- SIGNUP APP LINKS -->
+            <!-- AMPLIFY APP LINKS (Independent Verification) -->
             <!-- ===================================================== -->
-            <!-- Handles:
-                 https://aslidesikisan.netlify.app/signup
-                 https://www.offerlifetime.com/signup
-            -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
-
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
 
-                <!-- Netlify signup -->
-                <data
-                    android:scheme="https"
-                    android:host="aslidesikisan.netlify.app"
-                    android:pathPrefix="/signup" />
-
-                <data
-                    android:scheme="http"
-                    android:host="aslidesikisan.netlify.app"
-                    android:pathPrefix="/signup" />
-
-                <!-- Production website signup -->
-                <data
-                    android:scheme="https"
-                    android:host="www.offerlifetime.com"
-                    android:pathPrefix="/signup" />
-
-                <data
-                    android:scheme="http"
-                    android:host="www.offerlifetime.com"
-                    android:pathPrefix="/signup" />
+                <data android:scheme="https" android:host="master.d1yeg5lmbstgw1.amplifyapp.com" />
+                <data android:scheme="http" android:host="master.d1yeg5lmbstgw1.amplifyapp.com" />
+                
+                <!-- Match any path under /members -->
+                <data android:pathPrefix="/members" />
             </intent-filter>
 
             <!-- ===================================================== -->
-            <!-- WISHLIST APP LINKS -->
+            <!-- PRODUCTION DOMAIN APP LINKS -->
             <!-- ===================================================== -->
-            <!-- Handles:
-                 https://aslidesikisan.netlify.app/w/ABC123
-            -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
-
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
 
-                <!-- Netlify wishlist -->
-                <data
-                    android:scheme="https"
-                    android:host="aslidesikisan.netlify.app"
-                    android:pathPrefix="/w/" />
+                <data android:scheme="https" android:host="www.offerlifetime.com" />
+                <data android:scheme="http" android:host="www.offerlifetime.com" />
+                <data android:scheme="https" android:host="offerlifetime.com" />
 
-                <data
-                    android:scheme="http"
-                    android:host="aslidesikisan.netlify.app"
-                    android:pathPrefix="/w/" />
+                <data android:pathPrefix="/signup" />
+                <data android:pathPrefix="/wishlist" />
+                <data android:pathPrefix="/w" />
             </intent-filter>
 
         </activity>

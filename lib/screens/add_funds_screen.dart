@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
-
-const _kWalletBalanceDisplay = r'$3,210.40';
-const _kWalletBalanceRaw = '3210.40';
+import '../state/profile_state.dart';
 
 class AddFundsScreen extends StatelessWidget {
   const AddFundsScreen({super.key});
@@ -149,10 +147,14 @@ class _AddFundsBodyState extends State<_AddFundsBody> {
   }
 
   void _handleAmountChanged(String value) {
+    final profile = ProfileProvider.of(context, listen: false).data;
+    final balance = profile.walletBalance ?? 0.0;
+    final balanceStr = balance.toStringAsFixed(2);
+
     String? label;
     if (_presetValues.contains(value)) {
       label = value;
-    } else if (value == _kWalletBalanceRaw) {
+    } else if (value == balanceStr) {
       label = 'MAX';
     }
 
@@ -163,12 +165,15 @@ class _AddFundsBodyState extends State<_AddFundsBody> {
 
   @override
   Widget build(BuildContext context) {
+    final profile = ProfileProvider.of(context).data;
+    final balance = profile.walletBalance ?? 0.0;
+
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const _WalletTopUpCard(balanceText: _kWalletBalanceDisplay),
+          _WalletTopUpCard(balanceText: '₹${balance.toStringAsFixed(2)}'),
           const SizedBox(height: 20),
           _AmountEntryCard(
             presets: _presetValues,
@@ -176,6 +181,7 @@ class _AddFundsBodyState extends State<_AddFundsBody> {
             highlightedPreset: _highlightedPreset,
             onPresetSelected: _handlePresetSelection,
             onAmountChanged: _handleAmountChanged,
+            onMaxTap: () => _handlePresetSelection(balance.toStringAsFixed(2), labelOverride: 'MAX'),
           ),
           const SizedBox(height: 20),
           _PaymentOptionsSection(
@@ -187,7 +193,7 @@ class _AddFundsBodyState extends State<_AddFundsBody> {
           const SizedBox(height: 20),
           const _PromoCodeCard(),
           const SizedBox(height: 28),
-          const _ConfirmButton(),
+          _ConfirmButton(isGuest: profile.partnerId.isEmpty),
         ],
       ),
     );
@@ -288,6 +294,7 @@ class _AmountEntryCard extends StatelessWidget {
     required this.highlightedPreset,
     required this.onPresetSelected,
     required this.onAmountChanged,
+    required this.onMaxTap,
   });
 
   final List<String> presets;
@@ -295,6 +302,7 @@ class _AmountEntryCard extends StatelessWidget {
   final String? highlightedPreset;
   final void Function(String presetValue, {String? labelOverride}) onPresetSelected;
   final ValueChanged<String> onAmountChanged;
+  final VoidCallback onMaxTap;
 
   @override
   Widget build(BuildContext context) {
@@ -321,7 +329,7 @@ class _AmountEntryCard extends StatelessWidget {
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             onChanged: onAmountChanged,
             decoration: InputDecoration(
-              prefixText: '\$',
+              prefixText: '₹',
               hintText: '500.00',
               filled: true,
               fillColor: isDark ? const Color(0xFF111827) : const Color(0xFFF8FAFC),
@@ -355,7 +363,7 @@ class _AmountEntryCard extends StatelessWidget {
             children: [
               for (final preset in presets)
                 _PresetChip(
-                  label: '\$$preset',
+                  label: '₹$preset',
                   isHighlighted: highlightedPreset == preset,
                   onTap: () => onPresetSelected(preset),
                 ),
@@ -363,7 +371,7 @@ class _AmountEntryCard extends StatelessWidget {
                 label: 'MAX',
                 isOutlined: true,
                 isHighlighted: highlightedPreset == 'MAX',
-                onTap: () => onPresetSelected(_kWalletBalanceRaw, labelOverride: 'MAX'),
+                onTap: onMaxTap,
               ),
             ],
           ),
@@ -613,20 +621,22 @@ class _PromoCodeCard extends StatelessWidget {
 }
 
 class _ConfirmButton extends StatelessWidget {
-  const _ConfirmButton();
+  const _ConfirmButton({required this.isGuest});
+
+  final bool isGuest;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return ElevatedButton(
-      onPressed: () {},
+      onPressed: isGuest ? null : () {},
       style: ElevatedButton.styleFrom(
         backgroundColor: theme.colorScheme.primary,
         foregroundColor: Colors.white,
         padding: const EdgeInsets.symmetric(vertical: 18),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       ),
-      child: const Text('Confirm & Add Funds'),
+      child: Text(isGuest ? 'Sign in to Add Funds' : 'Confirm & Add Funds'),
     );
   }
 }

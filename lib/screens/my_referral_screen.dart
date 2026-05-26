@@ -49,21 +49,7 @@ class _MyReferralScreenState extends State<MyReferralScreen> {
   }
 
   String _buildLink(String partnerId) {
-    var base = referralSignupBaseUrl();
-    if (base.isEmpty) {
-      final fromServer = _serverLinkLeft ?? _serverLinkRight;
-      if (fromServer != null && fromServer.isNotEmpty) {
-        final u = Uri.tryParse(fromServer);
-        if (u != null && u.hasScheme) {
-          base = Uri(
-            scheme: u.scheme,
-            host: u.host,
-            port: u.hasPort ? u.port : null,
-            path: u.path.isEmpty ? '/' : u.path,
-          ).toString();
-        }
-      }
-    }
+    final base = referralSignupBaseUrl();
     if (base.isEmpty) return '';
     final ref = Uri.encodeQueryComponent(partnerId);
     final leg = Uri.encodeQueryComponent(_leg);
@@ -71,9 +57,6 @@ class _MyReferralScreenState extends State<MyReferralScreen> {
   }
 
   String _linkForDisplay(String partnerId) {
-    final server =
-        _leg == 'RIGHT' ? _serverLinkRight : _serverLinkLeft;
-    if (server != null && server.isNotEmpty) return server;
     return _buildLink(partnerId);
   }
 

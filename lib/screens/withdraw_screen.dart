@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../state/profile_state.dart';
 
 class WithdrawScreen extends StatelessWidget {
   const WithdrawScreen({super.key});
@@ -88,7 +89,6 @@ class _WithdrawBody extends StatefulWidget {
 }
 
 class _WithdrawBodyState extends State<_WithdrawBody> {
-  static const _balanceRaw = '3210.40';
   static const _presetValues = ['100', '250', '500'];
 
   late final TextEditingController _amountController;
@@ -118,10 +118,14 @@ class _WithdrawBodyState extends State<_WithdrawBody> {
   }
 
   void _handleAmountChanged(String value) {
+    final profile = ProfileProvider.of(context, listen: false).data;
+    final balance = profile.walletBalance ?? 0.0;
+    final balanceStr = balance.toStringAsFixed(2);
+
     String? chip;
     if (_presetValues.contains(value)) {
       chip = value;
-    } else if (value == _balanceRaw) {
+    } else if (value == balanceStr) {
       chip = 'MAX';
     }
 
@@ -133,18 +137,22 @@ class _WithdrawBodyState extends State<_WithdrawBody> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final profile = ProfileProvider.of(context).data;
+    final balance = profile.walletBalance ?? 0.0;
+
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const _BalanceSummaryCard(),
+          _BalanceSummaryCard(balance: balance),
           const SizedBox(height: 20),
           _AmountSection(
             controller: _amountController,
             selectedPresetLabel: _selectedPresetLabel,
             onPresetTap: _handlePresetTap,
             onAmountChanged: _handleAmountChanged,
+            onMaxTap: () => _handlePresetTap(balance.toStringAsFixed(2), labelOverride: 'MAX'),
           ),
           const SizedBox(height: 20),
           _MethodSelector(
@@ -162,9 +170,9 @@ class _WithdrawBodyState extends State<_WithdrawBody> {
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
             ),
-            onPressed: () {},
+            onPressed: profile.partnerId.isEmpty ? null : () {},
             child: Text(
-              'Confirm Withdrawal',
+              profile.partnerId.isEmpty ? 'Sign in to Withdraw' : 'Confirm Withdrawal',
               style: theme.textTheme.titleMedium?.copyWith(
                 color: Colors.white,
                 fontWeight: FontWeight.w700,
@@ -187,7 +195,9 @@ class _WithdrawBodyState extends State<_WithdrawBody> {
 }
 
 class _BalanceSummaryCard extends StatelessWidget {
-  const _BalanceSummaryCard();
+  const _BalanceSummaryCard({required this.balance});
+
+  final double balance;
 
   @override
   Widget build(BuildContext context) {
@@ -217,7 +227,7 @@ class _BalanceSummaryCard extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            '₹3,210.40',
+            '₹${balance.toStringAsFixed(2)}',
             style: theme.textTheme.displaySmall?.copyWith(
               color: Colors.white,
               fontWeight: FontWeight.w700,
@@ -245,12 +255,14 @@ class _AmountSection extends StatelessWidget {
     required this.selectedPresetLabel,
     required this.onPresetTap,
     required this.onAmountChanged,
+    required this.onMaxTap,
   });
 
   final TextEditingController controller;
   final String? selectedPresetLabel;
   final void Function(String value, {String? labelOverride}) onPresetTap;
   final ValueChanged<String> onAmountChanged;
+  final VoidCallback onMaxTap;
 
   @override
   Widget build(BuildContext context) {
@@ -327,7 +339,7 @@ class _AmountSection extends StatelessWidget {
                 label: 'MAX',
                 isOutlined: true,
                 isHighlighted: selectedPresetLabel == 'MAX',
-                onTap: () => onPresetTap(_WithdrawBodyState._balanceRaw, labelOverride: 'MAX'),
+                onTap: onMaxTap,
               ),
             ],
           ),

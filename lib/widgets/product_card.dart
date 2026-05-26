@@ -138,8 +138,53 @@ class _ProductCardState extends State<ProductCard> {
                   ),
                 ),
               ),
+              if (widget.product.isComingSoon)
+                Positioned(
+                  left: 0,
+                  top: 0,
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          Colors.red.shade600,
+                          Colors.orange.shade700,
+                        ],
+                      ),
+                      borderRadius: const BorderRadius.only(
+                        topLeft: Radius.circular(18),
+                        bottomRight: Radius.circular(12),
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.3),
+                          blurRadius: 6,
+                          offset: const Offset(2, 2),
+                        ),
+                      ],
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.timer_outlined,
+                            color: Colors.white, size: 12),
+                        SizedBox(width: 5),
+                        Text(
+                          'COMING SOON',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               Positioned(
-                top: 12,
+                top: widget.product.isComingSoon ? 32 : 12,
                 left: 12,
                 child: DecoratedBox(
                   decoration: BoxDecoration(
@@ -167,7 +212,7 @@ class _ProductCardState extends State<ProductCard> {
                 ),
               ),
               Positioned(
-                top: 10,
+                top: widget.product.isComingSoon ? 30 : 10,
                 right: 10,
                 child: Tooltip(
                   message: isWishlisted
@@ -300,16 +345,22 @@ class _ProductCardState extends State<ProductCard> {
           required bool filled,
           required IconData icon,
           required String label,
-          required VoidCallback onPressed,
+          required VoidCallback? onPressed,
           Color? filledBackgroundOverride,
         }) {
-          final fillBg =
-              filledBackgroundOverride ?? theme.colorScheme.primary;
-          const fillFg = Colors.white;
+          final isDisabled = onPressed == null;
+          final fillBg = isDisabled
+              ? theme.disabledColor.withValues(alpha: 0.12)
+              : (filledBackgroundOverride ?? theme.colorScheme.primary);
+          final fillFg = isDisabled
+              ? theme.disabledColor
+              : Colors.white;
           final labelStyle = TextStyle(
             fontSize: btnLabelSize,
             fontWeight: FontWeight.w700,
-            color: filled ? fillFg : theme.colorScheme.primary,
+            color: filled 
+                ? fillFg 
+                : (isDisabled ? theme.disabledColor : theme.colorScheme.primary),
           );
           final content = Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -318,7 +369,9 @@ class _ProductCardState extends State<ProductCard> {
               Icon(
                 icon,
                 size: btnIconSize,
-                color: filled ? fillFg : theme.colorScheme.primary,
+                color: filled 
+                    ? fillFg 
+                    : (isDisabled ? theme.disabledColor : theme.colorScheme.primary),
               ),
               SizedBox(width: isCompactCard ? 3 : 5),
               Flexible(
@@ -349,6 +402,8 @@ class _ProductCardState extends State<ProductCard> {
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 backgroundColor: fillBg,
                 foregroundColor: fillFg,
+                disabledBackgroundColor: theme.disabledColor.withValues(alpha: 0.12),
+                disabledForegroundColor: theme.disabledColor,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10),
                 ),
@@ -365,7 +420,9 @@ class _ProductCardState extends State<ProductCard> {
               ),
               minimumSize: const Size(0, 0),
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              side: BorderSide(color: theme.colorScheme.primary),
+              side: BorderSide(
+                color: isDisabled ? theme.disabledColor : theme.colorScheme.primary,
+              ),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(10),
               ),
@@ -459,9 +516,11 @@ class _ProductCardState extends State<ProductCard> {
                             filledBackgroundOverride: inCart
                                 ? const Color(0xFF059669)
                                 : const Color(0xFF0891B2),
-                            onPressed: () {
-                              CartProvider.of(context, listen: false)
-                                  .addProduct(widget.product);
+                            onPressed: widget.product.isComingSoon
+                                ? null
+                                : () {
+                                    CartProvider.of(context, listen: false)
+                                        .addProduct(widget.product);
                               if (!context.mounted) return;
                               ScaffoldMessenger.of(context)
                                 ..hideCurrentSnackBar()
@@ -493,15 +552,17 @@ class _ProductCardState extends State<ProductCard> {
                             filled: true,
                             icon: Icons.bolt_rounded,
                             label: 'Buy Now',
-                            onPressed: () {
-                              Navigator.of(context).pushNamed(
-                                CustomerDetailsScreen.routeName,
-                                arguments: CheckoutArguments(
-                                  product: widget.product,
-                                  quantity: 1,
-                                ),
-                              );
-                            },
+                            onPressed: widget.product.isComingSoon
+                                ? null
+                                : () {
+                                    Navigator.of(context).pushNamed(
+                                      CustomerDetailsScreen.routeName,
+                                      arguments: CheckoutArguments(
+                                        product: widget.product,
+                                        quantity: 1,
+                                      ),
+                                    );
+                                  },
                           ),
                         ),
                       ],

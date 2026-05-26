@@ -203,11 +203,14 @@ class ApiClient {
   }
 
   Future<List<ProductCatalogEntry>> fetchPublicProducts(
-      {int limit = 100, int page = 1}) async {
-    final uri =
-        _buildUri('products/public', {'limit': '$limit', 'page': '$page'});
-    final response = await _httpClient
-        .get(uri, headers: ApiConfig.jsonHeaders);
+      {int limit = 100, int page = 1, List<String>? ids}) async {
+    final query = {
+      'limit': '$limit',
+      'page': '$page',
+      if (ids != null && ids.isNotEmpty) 'ids': ids.join(','),
+    };
+    final uri = _buildUri('products/public', query);
+    final response = await _httpClient.get(uri, headers: ApiConfig.jsonHeaders);
     return _parseProductList(response, context: 'Fetch public products');
   }
 
@@ -225,6 +228,25 @@ class ApiClient {
     final uri = _buildUri('wishlist');
     final response = await _httpClient.get(uri, headers: _authorizedHeaders());
     _throwIfNeeded(response, context: 'Fetch wishlist');
+    final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+    final data = decoded['data'] as List<dynamic>? ?? const [];
+    return data
+        .whereType<Map<String, dynamic>>()
+        .map((item) {
+          final productJson = item['product'];
+          if (productJson is Map<String, dynamic>) {
+            return Product.fromJson(productJson);
+          }
+          return null;
+        })
+        .whereType<Product>()
+        .toList(growable: false);
+  }
+
+  Future<List<Product>> fetchSharedWishlist(String token) async {
+    final uri = _buildUri('wishlist/shared/$token');
+    final response = await _httpClient.get(uri, headers: ApiConfig.jsonHeaders);
+    _throwIfNeeded(response, context: 'Fetch shared wishlist');
     final decoded = jsonDecode(response.body) as Map<String, dynamic>;
     final data = decoded['data'] as List<dynamic>? ?? const [];
     return data
@@ -287,24 +309,30 @@ class ApiClient {
 
   Future<List<SocialLink>> fetchSocialLinks() async {
     try {
-      // Try both common naming conventions
-      final endpoints = ['social_links', 'social-links', 'settings/social-links'];
+      // Try media-manager first as requested by user, then fallbacks
+      final endpoints = ['media-manager', 'social-links', 'social_links', 'settings/social-links'];
       
       for (final endpoint in endpoints) {
         final uri = _buildUri(endpoint);
         debugPrint('Trying to fetch social links from: $uri');
-        final response = await _httpClient.get(uri, headers: ApiConfig.jsonHeaders);
-        
-        if (response.statusCode == 200) {
-          debugPrint('Successfully fetched social links from $endpoint');
-          return _parseSocialLinks(response.body);
+        try {
+          final response = await _httpClient.get(uri, headers: ApiConfig.jsonHeaders);
+          
+          if (response.statusCode == 200) {
+            debugPrint('Successfully fetched social links from $endpoint');
+            return _parseSocialLinks(response.body);
+          } else {
+            debugPrint('Failed to fetch from $endpoint: ${response.statusCode}');
+          }
+        } catch (e) {
+          debugPrint('Error fetching from $endpoint: $e');
         }
       }
       
       debugPrint('All social links endpoints failed');
       return [];
     } catch (e) {
-      debugPrint('Error fetching social links: $e');
+      debugPrint('Unexpected error in fetchSocialLinks: $e');
       return [];
     }
   }
@@ -317,11 +345,11 @@ class ApiClient {
       if (decoded is List<dynamic>) {
         list = decoded;
       } else if (decoded is Map<String, dynamic>) {
-        // Handle different common wrapping keys
-        final data = decoded['data'] ?? decoded['social_links'] ?? decoded['links'] ?? decoded['results'];
+        // Handle 'links' key from media-manager response and other common wrapping keys
+        final data = decoded['links'] ?? decoded['data'] ?? decoded['social_links'] ?? decoded['results'];
         if (data is List<dynamic>) {
           list = data;
-        } else if (decoded.containsKey('id') && decoded.containsKey('platform')) {
+        } else if (decoded.containsKey('id') && (decoded.containsKey('platform') || decoded.containsKey('url'))) {
           // It's a single object, wrap it
           list = [decoded];
         }
@@ -339,6 +367,60 @@ class ApiClient {
       return [];
     }
   }
+
+  // ========================================================
+  // SHIPROCKET / SHIPPING APIs
+  // ========================================================
+
+  /// Check courier serviceability for a given pincode.
+  Future<Map<String, dynamic>> checkServiceability({
+    required String pickupPincode,
+    required String deliveryPincode,
+    required double weight,
+    required bool cod,
+  }) async {
+    await ensureAuthenticated();
+    final uri = _buildUri('shipping/check-serviceability');
+    final response = await _httpClient.post(
+      uri,
+      headers: _authHeaders,
+      body: jsonEncode({
+        'pickup_pincode': pickupPincode,
+        'delivery_pincode': deliveryPincode,
+        'weight': weight,
+        'cod': cod,
+      }),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Serviceability check failed: ${response.body}');
+    }
+
+    return jsonDecode(response.body);
+  }
+
+  /// Get tracking information for an order.
+  Future<Map<String, dynamic>> fetchOrderTracking(int orderId) async {
+    await ensureAuthenticated();
+    final uri = _buildUri('orders/$orderId/tracking');
+    final response = await _httpClient.get(uri, headers: _authHeaders);
+
+    if (response.statusCode != 200) {
+      throw Exception('Failed to fetch tracking: ${response.body}');
+    }
+
+    return jsonDecode(response.body);
+  }
+
+  // ========================================================
+  // HELPERS
+  // ========================================================
+
+  Map<String, String> get _authHeaders => {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        if (_accessToken != null) 'Authorization': 'Bearer $_accessToken',
+      };
 
   Future<List<Category>> fetchPublicCategories(
       {int limit = 100, int page = 1}) async {

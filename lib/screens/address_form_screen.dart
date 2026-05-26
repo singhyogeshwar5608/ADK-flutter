@@ -287,11 +287,12 @@ class _AddressFormScreenState extends State<AddressFormScreen> {
                 keyboardType: TextInputType.phone,
                 inputFormatters: [
                   FilteringTextInputFormatter.digitsOnly,
-                  LengthLimitingTextInputFormatter(12),
+                  LengthLimitingTextInputFormatter(10),
                 ],
                 validator: (v) {
                   if (v == null || v.trim().isEmpty) return 'Required';
-                  if (v.trim().length < 10) return 'Enter a valid phone';
+                  final phoneRegex = RegExp(r'^[6-9]\d{9}$');
+                  if (!phoneRegex.hasMatch(v.trim())) return 'Enter valid 10-digit mobile number';
                   return null;
                 },
               ),
@@ -301,7 +302,8 @@ class _AddressFormScreenState extends State<AddressFormScreen> {
                 keyboardType: TextInputType.emailAddress,
                 validator: (v) {
                   if (v == null || v.trim().isEmpty) return 'Required';
-                  if (!v.trim().contains('@')) return 'Enter a valid email';
+                  final emailRegex = RegExp(r'^[\w\.-]+@[\w\.-]+\.\w{2,}$');
+                  if (!emailRegex.hasMatch(v.trim())) return 'Enter a valid email address';
                   return null;
                 },
               ),

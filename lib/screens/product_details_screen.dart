@@ -11,6 +11,7 @@ import 'customer_details_screen.dart';
 
 import '../state/cart_state.dart';
 import '../state/product_catalog_state.dart';
+import '../state/profile_state.dart';
 import '../state/wishlist_state.dart';
 import '../theme/app_theme.dart';
 import '../utils/product_share.dart';
@@ -21,6 +22,8 @@ class ProductDetailsScreen extends StatefulWidget {
   const ProductDetailsScreen({super.key, required this.product});
 
   final Product product;
+
+  static const routeName = '/product-details';
 
   @override
   State<ProductDetailsScreen> createState() => _ProductDetailsScreenState();
@@ -82,13 +85,51 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
     final theme = Theme.of(context);
     final product = _product;
 
+    // Check if user is allowed to view this product
+    final profileState = ProfileProvider.of(context);
+    final isPartner = profileState.isAuthenticated && profileState.data.partnerId.trim().isNotEmpty;
+    if (product.isMlm && !isPartner) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Access Restricted')),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.lock_outline, size: 64, color: Colors.orange),
+              const SizedBox(height: 16),
+              const Text(
+                'This product is reserved for MLM Partners.',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Please sign in as a partner to view this item.',
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton(
+                onPressed: () => Navigator.of(context).maybePop(),
+                child: const Text('Go Back'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     final dynamicPriceData = product.calculateDynamicPrice('India', 'Haryana');
 
     final catalogState = ProductCatalogProvider.of(context);
     final sourceEntries = catalogState.entries;
     final relatedEntries =
         (sourceEntries.isNotEmpty ? sourceEntries : local_data.productCatalog)
-            .where((entry) => entry.product.id != product.id)
+            .where((entry) {
+              // Filter out the current product and MLM products for guests
+              if (entry.product.id == product.id) return false;
+              if (entry.product.isMlm && !isPartner) return false;
+              return true;
+            })
             .take(6)
             .toList();
 
@@ -294,121 +335,132 @@ class _ImageCarouselState extends State<ImageCarousel> {
       builder: (context, constraints) {
         final w = constraints.maxWidth;
         final safeW = w.isFinite && w > 0 ? w : MediaQuery.sizeOf(context).width - 32;
-        final imageHeight = (safeW * 0.54).clamp(158.0, 232.0);
+        final imageHeight = (safeW * 0.95).clamp(250.0, 380.0);
 
         return SizedBox(
           height: imageHeight,
           width: safeW,
-          child: Container(
-            decoration: BoxDecoration(
-              color: theme.cardColor,
-              borderRadius: BorderRadius.circular(radius),
-              border: Border.all(
-                color: theme.colorScheme.outline.withValues(alpha: 0.2),
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.primary.withValues(alpha: 0.12),
-                  blurRadius: 28,
-                  offset: const Offset(0, 10),
-                  spreadRadius: -2,
-                ),
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.08),
-                  blurRadius: 22,
-                  offset: const Offset(0, 8),
-                ),
-              ],
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(radius),
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  PageView.builder(
-                    controller: _controller,
-                    itemCount: images.length,
-                    onPageChanged: (index) => setState(() => _current = index),
-                    itemBuilder: (context, index) => SafeNetworkImage(
-                      src: images[index],
-                      fit: BoxFit.cover,
-                    ),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              PageView.builder(
+                controller: _controller,
+                itemCount: images.length,
+                onPageChanged: (index) => setState(() => _current = index),
+                itemBuilder: (context, index) => GestureDetector(
+                  onTap: () => _showFullscreenImage(context, images[index]),
+                  child: SafeNetworkImage(
+                    src: images[index],
+                    fit: BoxFit.contain,
                   ),
-                  Positioned.fill(
-                    child: IgnorePointer(
-                      child: DecoratedBox(
+                ),
+              ),
+              if (images.length > 1)
+                Positioned(
+                  bottom: 12,
+                  left: 0,
+                  right: 0,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: List.generate(images.length, (index) {
+                      final isActive = index == _current;
+                      return AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        width: isActive ? 18 : 6,
+                        height: 5,
+                        margin: const EdgeInsets.symmetric(horizontal: 3),
                         decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [
-                              Colors.white
-                                  .withValues(alpha: isDark ? 0.03 : 0.06),
-                              Colors.transparent,
-                              Colors.black
-                                  .withValues(alpha: isDark ? 0.14 : 0.07),
-                            ],
-                            stops: const [0.0, 0.42, 1.0],
-                          ),
+                          color: isActive
+                              ? AppColors.primary
+                              : (isDark
+                                  ? const Color(0xFF475569)
+                                  : const Color(0xFFD1D5DB)),
+                          borderRadius: BorderRadius.circular(999),
                         ),
-                      ),
+                      );
+                    }),
+                  ),
+                ),
+              Positioned(
+                top: 0,
+                left: 0,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 9,
+                    vertical: 5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Text(
+                    'BEST SELLER',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 9,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.6,
                     ),
                   ),
-                  Positioned(
-                    top: 12,
-                    left: 12,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 9,
-                        vertical: 5,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppColors.primary,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Text(
-                        'BEST SELLER',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 9,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.6,
-                        ),
-                      ),
-                    ),
-                  ),
-                  if (images.length > 1)
-                    Positioned(
-                      bottom: 12,
-                      left: 0,
-                      right: 0,
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: List.generate(images.length, (index) {
-                          final isActive = index == _current;
-                          return AnimatedContainer(
-                            duration: const Duration(milliseconds: 200),
-                            width: isActive ? 18 : 6,
-                            height: 5,
-                            margin: const EdgeInsets.symmetric(horizontal: 3),
-                            decoration: BoxDecoration(
-                              color: isActive
-                                  ? AppColors.primary
-                                  : (isDark
-                                      ? const Color(0xFF475569)
-                                      : const Color(0xFFD1D5DB)),
-                              borderRadius: BorderRadius.circular(999),
-                            ),
-                          );
-                        }),
-                      ),
-                    ),
-                ],
+                ),
               ),
-            ),
+            ],
           ),
         );
       },
+    );
+  }
+
+  void _showFullscreenImage(BuildContext context, String imageUrl) {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.9),
+      builder: (context) => _FullscreenImageDialog(imageUrl: imageUrl),
+    );
+  }
+}
+
+class _FullscreenImageDialog extends StatelessWidget {
+  const _FullscreenImageDialog({required this.imageUrl});
+  final String imageUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          GestureDetector(
+            onTap: () => Navigator.of(context).pop(),
+            child: InteractiveViewer(
+              minScale: 0.5,
+              maxScale: 4.0,
+              child: Center(
+                child: SafeNetworkImage(
+                  src: imageUrl,
+                  fit: BoxFit.contain,
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            top: MediaQuery.paddingOf(context).top + 10,
+            right: 20,
+            child: IconButton(
+              onPressed: () => Navigator.of(context).pop(),
+              icon: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: const BoxDecoration(
+                  color: Colors.black54,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.close, color: Colors.white, size: 24),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -543,18 +595,18 @@ class _ProductSummaryCard extends StatelessWidget {
             children: [
               ClipRRect(
                 borderRadius: BorderRadius.circular(10),
-                child: SizedBox(
+                child: Container(
                   width: 72,
                   height: 72,
+                  color: theme.brightness == Brightness.dark
+                      ? const Color(0xFF1E293B)
+                      : const Color(0xFFF1F5F9),
                   child: thumb.isNotEmpty
-                      ? SafeNetworkImage(src: thumb, fit: BoxFit.cover)
-                      : ColoredBox(
-                          color: theme.colorScheme.surfaceContainerHighest,
-                          child: Icon(
-                            Icons.image_not_supported_outlined,
-                            color: theme.colorScheme.onSurface
-                                .withValues(alpha: 0.35),
-                          ),
+                      ? SafeNetworkImage(src: thumb, fit: BoxFit.contain)
+                      : Icon(
+                          Icons.image_not_supported_outlined,
+                          color: theme.colorScheme.onSurface
+                              .withValues(alpha: 0.35),
                         ),
                 ),
               ),
@@ -1030,44 +1082,54 @@ class BottomActionBar extends StatelessWidget {
                       color: Color(0xFF0891B2),
                       size: 17,
                     ),
-                    onPressed: () {
-                      CartProvider.of(context, listen: false)
-                          .addProduct(product, quantity: quantity);
-                      _showSnackBar(context);
-                    },
+                    onPressed: product.isComingSoon
+                        ? null
+                        : () {
+                            CartProvider.of(context, listen: false)
+                                .addProduct(product, quantity: quantity);
+                            _showSnackBar(context);
+                          },
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: _ScaleOnPress(
-                    onPressed: () {
-                      Navigator.of(context).pushNamed(
-                        CustomerDetailsScreen.routeName,
-                        arguments: CheckoutArguments(
-                          product: product,
-                          quantity: quantity,
-                        ),
-                      );
-                    },
+                    onPressed: product.isComingSoon
+                        ? null
+                        : () {
+                            Navigator.of(context).pushNamed(
+                              CustomerDetailsScreen.routeName,
+                              arguments: CheckoutArguments(
+                                product: product,
+                                quantity: quantity,
+                              ),
+                            );
+                          },
                     child: Container(
                       height: 44,
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
-                        color: AppColors.primary,
+                        color: product.isComingSoon
+                            ? theme.disabledColor.withValues(alpha: 0.12)
+                            : AppColors.primary,
                         borderRadius: BorderRadius.circular(13),
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppColors.primary.withValues(alpha: 0.26),
-                            blurRadius: 14,
-                            offset: const Offset(0, 6),
-                          ),
-                        ],
+                        boxShadow: product.isComingSoon
+                            ? null
+                            : [
+                                BoxShadow(
+                                  color: AppColors.primary.withValues(alpha: 0.26),
+                                  blurRadius: 14,
+                                  offset: const Offset(0, 6),
+                                ),
+                              ],
                       ),
-                      child: const Text(
+                      child: Text(
                         'Buy Now',
                         style: TextStyle(
                           fontWeight: FontWeight.w800,
-                          color: Colors.white,
+                          color: product.isComingSoon
+                              ? theme.disabledColor
+                              : Colors.white,
                           fontSize: 14,
                           letterSpacing: 0.2,
                         ),
@@ -1090,7 +1152,7 @@ class _ScaleOnPress extends StatefulWidget {
   const _ScaleOnPress({required this.child, required this.onPressed});
 
   final Widget child;
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
 
   @override
   State<_ScaleOnPress> createState() => _ScaleOnPressState();
@@ -1100,6 +1162,7 @@ class _ScaleOnPressState extends State<_ScaleOnPress> {
   bool _pressed = false;
 
   void _setPressed(bool value) {
+    if (widget.onPressed == null) return;
     if (_pressed == value) return;
     setState(() => _pressed = value);
   }

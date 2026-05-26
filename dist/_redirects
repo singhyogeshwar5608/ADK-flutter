@@ -1,0 +1,17 @@
+# App Link Verification (CRITICAL)
+/.well-known/assetlinks.json    /.well-known/assetlinks.json   200
+
+# Referral / signup bridge
+/members/signup    /signup/index.html   200
+/signup    /signup/index.html   200
+/signup/   /signup/index.html   200
+
+# Wishlist deep links
+/members/w/*         /wishlist/:splat   200
+/members/wishlist/*  /wishlist/:splat   200
+/w/*         /wishlist/:splat   200
+/wishlist/*  /wishlist/:splat   200
+/wishlist    /wishlist/index.html   200
+
+# React SPA
+/*    /index.html   200

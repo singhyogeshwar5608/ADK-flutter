@@ -29,10 +29,12 @@ import 'screens/menu_screen.dart';
 import 'screens/media_listing_screen.dart';
 import 'screens/adk_events_screen.dart';
 import 'screens/product_catalogue_screen.dart';
+import 'screens/product_details_screen.dart';
 import 'screens/delivery_center_screen.dart';
 import 'screens/contact_us_screen.dart';
 import 'screens/privacy_policy_screen.dart';
 import 'screens/terms_conditions_screen.dart';
+import 'models/product.dart';
 import 'state/product_catalog_state.dart';
 import 'state/theme_controller.dart';
 import 'state/cart_state.dart';
@@ -41,6 +43,7 @@ import 'state/wishlist_state.dart';
 import 'state/location_state.dart';
 import 'theme/app_theme.dart';
 import 'utils/deep_link_service.dart';
+import 'services/api_client.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -114,6 +117,33 @@ class _NetShopAppState extends State<NetShopApp> {
                     navigatorKey: _navigatorKey,
                     home: const HomeScreen(),
                     onGenerateRoute: (settings) {
+                      final name = settings.name ?? '';
+                      
+                      // Handle /product/ID deep links (especially for Web)
+                      if (name.startsWith('/product/')) {
+                        final productId = name.split('/').last.trim();
+                        if (productId.isNotEmpty) {
+                          return MaterialPageRoute(
+                            builder: (context) => _ProductDeepLinkLoader(productId: productId),
+                          );
+                        }
+                      }
+
+                      // Handle /wishlist/TOKEN or /members/wishlist/TOKEN deep links (especially for Web)
+                      final isWishlist = name.contains('/wishlist/') || name.contains('/w/');
+                      if (isWishlist) {
+                        final token = name.split('/').last.trim();
+                        if (token.isNotEmpty) {
+                          return MaterialPageRoute(
+                            builder: (context) => const WishlistScreen(),
+                            settings: RouteSettings(
+                              name: WishlistScreen.routeName,
+                              arguments: {'token': token},
+                            ),
+                          );
+                        }
+                      }
+
                       if (settings.name == BinaryTreeScreen.routeName) {
                         return MaterialPageRoute(
                           builder: (context) => BinaryTreeScreen(
@@ -124,6 +154,10 @@ class _NetShopAppState extends State<NetShopApp> {
                       return null;
                     },
                     routes: {
+                      ProductDetailsScreen.routeName: (context) {
+                        final product = ModalRoute.of(context)?.settings.arguments as Product;
+                        return ProductDetailsScreen(product: product);
+                      },
                       CartScreen.routeName: (_) => const CartScreen(),
                       '/checkout': (_) => const CheckoutScreen(),
                       WalletScreen.routeName: (_) => const WalletScreen(),
@@ -173,6 +207,70 @@ class _NetShopAppState extends State<NetShopApp> {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Helper widget to load a product from a deep link ID and navigate to details.
+class _ProductDeepLinkLoader extends StatefulWidget {
+  const _ProductDeepLinkLoader({required this.productId});
+  final String productId;
+
+  @override
+  State<_ProductDeepLinkLoader> createState() => _ProductDeepLinkLoaderState();
+}
+
+class _ProductDeepLinkLoaderState extends State<_ProductDeepLinkLoader> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadAndNavigate();
+    });
+  }
+
+  Future<void> _loadAndNavigate() async {
+    // delay to ensure catalog is initializing
+    await Future.delayed(const Duration(milliseconds: 800));
+    
+    if (!mounted) return;
+    
+    final catalog = ProductCatalogProvider.of(context, listen: false);
+    Product? product;
+
+    // 1. Try catalog
+    final entry = catalog.entries.where((e) => e.product.id.toString() == widget.productId).firstOrNull;
+    if (entry != null) {
+      product = entry.product;
+    } else {
+      // 2. Try API
+      try {
+        final results = await ApiClient.instance.fetchPublicProducts(ids: [widget.productId]);
+        if (results.isNotEmpty) {
+          product = results.first.product;
+        }
+      } catch (e) {
+        debugPrint('Deep link load failed: $e');
+      }
+    }
+
+    if (!mounted) return;
+
+    if (product != null) {
+      Navigator.of(context).pushReplacementNamed(
+        ProductDetailsScreen.routeName,
+        arguments: product,
+      );
+    } else {
+      // Fallback to home if not found
+      Navigator.of(context).pushReplacementNamed('/');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      body: Center(child: CircularProgressIndicator()),
     );
   }
 }

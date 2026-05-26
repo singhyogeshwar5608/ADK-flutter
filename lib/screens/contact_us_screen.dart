@@ -29,7 +29,7 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
       'icon': Icons.email,
       'color': const Color(0xFF10B981),
       'phone': '',
-      'email': 'support@aslidesikisan.com',
+      'email': 'support@offerlifetime.com',
       'whatsapp': '',
     },
     {

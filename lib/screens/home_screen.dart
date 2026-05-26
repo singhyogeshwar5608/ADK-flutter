@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/category.dart';
 import '../models/product_entry.dart';
 import '../state/product_catalog_state.dart';
+import '../state/profile_state.dart';
 import '../widgets/bottom_navbar.dart';
 import '../widgets/category_slider.dart';
 import '../widgets/header_widget.dart';
@@ -42,9 +43,22 @@ class _HomeScreenState extends State<HomeScreen> {
 
   List<ProductCatalogEntry> _filteredProducts(
       List<ProductCatalogEntry> source) {
+    final profileState = ProfileProvider.of(context);
+    final isPartner = profileState.isAuthenticated && profileState.data.partnerId.trim().isNotEmpty;
+
+    final baseFiltered = source.where((entry) {
+      // If it's an MLM product, only show it to authenticated partners
+      if (entry.product.isMlm && !isPartner) {
+        return false;
+      }
+      return true;
+    }).toList();
+
     final categoryFiltered = _selectedCategory == _allCategory
-        ? source
-        : source.where((entry) => entry.category == _selectedCategory).toList();
+        ? baseFiltered
+        : baseFiltered
+            .where((entry) => entry.category == _selectedCategory)
+            .toList();
 
     if (_searchQuery.isEmpty) return categoryFiltered;
 
@@ -61,8 +75,16 @@ class _HomeScreenState extends State<HomeScreen> {
 
   int _countProductsFor(
       String categoryLabel, List<ProductCatalogEntry> source) {
-    if (categoryLabel == _allCategory) return source.length;
-    return source.where((entry) => entry.category == categoryLabel).length;
+    final profileState = ProfileProvider.of(context);
+    final isPartner = profileState.isAuthenticated && profileState.data.partnerId.trim().isNotEmpty;
+
+    final filteredSource = source.where((entry) {
+      if (entry.product.isMlm && !isPartner) return false;
+      return true;
+    });
+
+    if (categoryLabel == _allCategory) return filteredSource.length;
+    return filteredSource.where((entry) => entry.category == categoryLabel).length;
   }
 
   List<CategoryCardData> _buildCategoryCards(
@@ -162,15 +184,20 @@ class _HomeScreenState extends State<HomeScreen> {
       extendBody: false,
       bottomNavigationBar: const BottomNavBar(),
       body: SafeArea(
-        child: CustomScrollView(
-          slivers: [
-            HeaderSliver(
-              searchController: _searchController,
-              searchQuery: _searchQuery,
-              onClearSearch: _clearSearchInput,
-            ),
+        child: RefreshIndicator(
+          onRefresh: catalogState.refresh,
+          displacement: 20,
+          color: theme.colorScheme.primary,
+          child: CustomScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            slivers: [
+              HeaderSliver(
+                searchController: _searchController,
+                searchQuery: _searchQuery,
+                onClearSearch: _clearSearchInput,
+              ),
             SliverPadding(
-              padding: const EdgeInsets.fromLTRB(0, 10, 0, 20),
+              padding: const EdgeInsets.fromLTRB(0, 10, 0, 0),
               sliver: SliverToBoxAdapter(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -197,7 +224,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
             SliverPadding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
+              padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
               sliver: SliverToBoxAdapter(
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -323,8 +350,9 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }
 
 class HeaderSliver extends StatelessWidget {

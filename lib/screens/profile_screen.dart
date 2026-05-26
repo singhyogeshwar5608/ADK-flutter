@@ -1454,21 +1454,7 @@ class _ReferralLinkCardState extends State<_ReferralLinkCard> {
   }
 
   String _buildLink(String partnerId) {
-    var base = referralSignupBaseUrl();
-    if (base.isEmpty) {
-      final fromServer = _serverLinkLeft ?? _serverLinkRight;
-      if (fromServer != null && fromServer.isNotEmpty) {
-        final u = Uri.tryParse(fromServer);
-        if (u != null && u.hasScheme) {
-          base = Uri(
-            scheme: u.scheme,
-            host: u.host,
-            port: u.hasPort ? u.port : null,
-            path: u.path.isEmpty ? '/' : u.path,
-          ).toString();
-        }
-      }
-    }
+    final base = referralSignupBaseUrl();
     if (base.isEmpty) return '';
     final ref = Uri.encodeQueryComponent(partnerId);
     final leg = Uri.encodeQueryComponent(_leg);
@@ -1476,20 +1462,10 @@ class _ReferralLinkCardState extends State<_ReferralLinkCard> {
   }
 
   String _linkForDisplay(String partnerId) {
-    final server =
-        _leg == 'RIGHT' ? _serverLinkRight : _serverLinkLeft;
-    if (server != null && server.isNotEmpty) return server;
     return _buildLink(partnerId);
   }
 
   String _describeSignupOrigin() {
-    final sample = _serverLinkLeft ?? _serverLinkRight;
-    if (sample != null && sample.isNotEmpty) {
-      final u = Uri.tryParse(sample);
-      if (u != null && u.hasScheme && u.host.isNotEmpty) {
-        return u.origin;
-      }
-    }
     final b = referralSignupBaseUrl();
     if (b.isNotEmpty) {
       final u = Uri.tryParse(b);
@@ -2173,10 +2149,14 @@ class _HeaderIconButton extends StatelessWidget {
 class _ProfileQRCodeSection extends StatelessWidget {
   const _ProfileQRCodeSection();
 
-  Future<void> _pickAndUpload(BuildContext context) async {
+  static Future<void> _pickAndUpload(BuildContext context) async {
     final profileState = ProfileProvider.of(context, listen: false);
     final picker = ImagePicker();
-    final image = await picker.pickImage(source: ImageSource.gallery);
+    final image = await picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 1600,
+      imageQuality: 88,
+    );
     if (image == null) return;
 
     // Show loading
@@ -2194,14 +2174,14 @@ class _ProfileQRCodeSection extends StatelessWidget {
         filename: image.name,
       );
       await profileState.updateQrCode(uploadResult.url);
-      if (context.mounted) Navigator.pop(context); // Close loading
+      if (context.mounted) Navigator.of(context, rootNavigator: true).pop(); // Close loading
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('QR Code updated successfully')),
         );
       }
     } catch (e) {
-      if (context.mounted) Navigator.pop(context); // Close loading
+      if (context.mounted) Navigator.of(context, rootNavigator: true).pop(); // Close loading
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Failed to upload QR Code: $e')),
@@ -2215,6 +2195,7 @@ class _ProfileQRCodeSection extends StatelessWidget {
     final theme = Theme.of(context);
     final profile = ProfileProvider.of(context).data;
     final qrCodeUrl = profile.qrCodeUrl;
+    final hasQr = qrCodeUrl != null && qrCodeUrl.isNotEmpty;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 20),
@@ -2226,7 +2207,7 @@ class _ProfileQRCodeSection extends StatelessWidget {
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: qrCodeUrl == null ? () => _pickAndUpload(context) : null,
+        onTap: !hasQr ? () => _pickAndUpload(context) : null,
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
@@ -2259,8 +2240,8 @@ class _ProfileQRCodeSection extends StatelessWidget {
                           ),
                         ),
                         Text(
-                          qrCodeUrl != null
-                              ? 'Tap to update your payment QR'
+                          hasQr
+                              ? 'Tap sync icon to update your payment QR'
                               : 'Upload for easier payments',
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: theme.colorScheme.onSurface
@@ -2271,7 +2252,7 @@ class _ProfileQRCodeSection extends StatelessWidget {
                       ],
                     ),
                   ),
-                  if (qrCodeUrl != null)
+                  if (hasQr)
                     IconButton.filledTonal(
                       onPressed: () => _pickAndUpload(context),
                       icon: const Icon(Icons.sync_rounded, size: 18),
@@ -2281,12 +2262,11 @@ class _ProfileQRCodeSection extends StatelessWidget {
                     ),
                 ],
               ),
-              if (qrCodeUrl != null) ...[
+              if (hasQr) ...[
                 const SizedBox(height: 16),
                 Center(
                   child: Container(
-                    width: 120,
-                    height: 120,
+                    constraints: const BoxConstraints(maxWidth: 240),
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(
@@ -2303,18 +2283,21 @@ class _ProfileQRCodeSection extends StatelessWidget {
                     ),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(14),
-                      child: Image.network(
-                        qrCodeUrl,
-                        fit: BoxFit.cover,
-                        loadingBuilder: (context, child, progress) {
-                          if (progress == null) return child;
-                          return const Center(
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          );
-                        },
-                        errorBuilder: (context, error, stack) => const Center(
-                          child: Icon(Icons.broken_image_outlined,
-                              color: Colors.red),
+                      child: AspectRatio(
+                        aspectRatio: 1,
+                        child: Image.network(
+                          qrCodeUrl!,
+                          fit: BoxFit.contain,
+                          loadingBuilder: (context, child, progress) {
+                            if (progress == null) return child;
+                            return const Center(
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            );
+                          },
+                          errorBuilder: (context, error, stack) => const Center(
+                            child: Icon(Icons.broken_image_outlined,
+                                color: Colors.red),
+                          ),
                         ),
                       ),
                     ),
