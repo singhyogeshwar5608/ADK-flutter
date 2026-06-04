@@ -492,9 +492,12 @@ class _CartItemCard extends StatelessWidget {
                 height: 68,
                 child: ColoredBox(
                   color: const Color(0xFFE2E8F0),
-                  child: SafeNetworkImage(
-                    src: item.product.imageUrl,
-                    fit: BoxFit.cover,
+                  child: Padding(
+                    padding: const EdgeInsets.all(4.0),
+                    child: SafeNetworkImage(
+                      src: item.product.imageUrl,
+                      fit: BoxFit.contain,
+                    ),
                   ),
                 ),
               ),

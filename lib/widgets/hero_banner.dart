@@ -139,7 +139,7 @@ class _HeroBannerState extends State<HeroBanner> {
             child: Stack(
               fit: StackFit.expand,
               children: [
-                SafeNetworkImage(src: data.imageUrl, fit: BoxFit.cover),
+                SafeNetworkImage(src: data.imageUrl, fit: BoxFit.contain),
               ],
             ),
           );

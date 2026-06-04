@@ -987,7 +987,7 @@ class _DescriptionSection extends StatelessWidget {
                         style: theme.textTheme.bodyMedium?.copyWith(
                           color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
                           height: 1.5,
-                          fontSize: 13,
+                          fontSize: 15,
                         ),
                       ),
                     ),

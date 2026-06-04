@@ -361,11 +361,14 @@ class _WishlistCard extends StatelessWidget {
               child: ClipRRect(
                 borderRadius:
                     const BorderRadius.horizontal(left: Radius.circular(18)),
-                child: SafeNetworkImage(
-                  src: product.imageUrl,
-                  width: 108,
-                  height: 108,
-                  fit: BoxFit.cover,
+                child: Padding(
+                  padding: const EdgeInsets.all(4.0),
+                  child: SafeNetworkImage(
+                    src: product.imageUrl,
+                    width: 108,
+                    height: 108,
+                    fit: BoxFit.contain,
+                  ),
                 ),
               ),
             ),

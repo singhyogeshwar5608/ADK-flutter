@@ -108,10 +108,11 @@ class _ProductCardState extends State<ProductCard> {
             controller: _pageController,
             itemCount: images.length,
             onPageChanged: (index) => setState(() => _currentIndex = index),
-            itemBuilder: (context, index) => SizedBox.expand(
+            itemBuilder: (context, index) => Padding(
+              padding: const EdgeInsets.all(8.0),
               child: SafeNetworkImage(
                 src: images[index],
-                fit: BoxFit.cover,
+                fit: BoxFit.contain,
                 alignment: Alignment.center,
               ),
             ),
@@ -308,7 +309,7 @@ class _ProductCardState extends State<ProductCard> {
           );
 
           return AspectRatio(
-            aspectRatio: isCompactCard ? 1 : 4 / 3,
+            aspectRatio: 1,
             child: imageStack,
           );
         }
