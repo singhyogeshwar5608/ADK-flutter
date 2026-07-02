@@ -19,7 +19,7 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
       'subtitle': 'Call us directly',
       'icon': Icons.phone,
       'color': const Color(0xFF3B82F6),
-      'phone': '+918707599904',
+      'phone': '+918307599904',
       'email': '',
       'whatsapp': '',
     },
@@ -29,7 +29,7 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
       'icon': Icons.email,
       'color': const Color(0xFF10B981),
       'phone': '',
-      'email': 'support@offerlifetime.com',
+      'email': 'familyfarmer26@gmail.com',
       'whatsapp': '',
     },
     {
@@ -39,7 +39,7 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
       'color': const Color(0xFF25D366),
       'phone': '',
       'email': '',
-      'whatsapp': '+918707599904',
+      'whatsapp': '+919307599904',
     },
     {
       'title': 'Address',
@@ -129,7 +129,7 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: Colors.red,
+        backgroundColor: AppColors.primary,
         behavior: SnackBarBehavior.floating,
       ),
     );

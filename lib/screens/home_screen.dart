@@ -42,12 +42,12 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   List<ProductCatalogEntry> _filteredProducts(
-      List<ProductCatalogEntry> source) {
+      List<ProductCatalogEntry> source,
+      List<Category> remoteCategories) {
     final profileState = ProfileProvider.of(context);
     final isPartner = profileState.isAuthenticated && profileState.data.partnerId.trim().isNotEmpty;
 
     final baseFiltered = source.where((entry) {
-      // If it's an MLM product, only show it to authenticated partners
       if (entry.product.isMlm && !isPartner) {
         return false;
       }
@@ -56,9 +56,26 @@ class _HomeScreenState extends State<HomeScreen> {
 
     final categoryFiltered = _selectedCategory == _allCategory
         ? baseFiltered
-        : baseFiltered
-            .where((entry) => entry.category == _selectedCategory)
-            .toList();
+        : () {
+            final selectedName = _selectedCategory.trim().toLowerCase();
+            final matchIds = <String>{};
+            final matchNames = <String>{selectedName};
+            final matchSlugs = <String>{};
+            for (final cat in remoteCategories) {
+              final name = cat.name.trim().toLowerCase();
+              if (name == selectedName) {
+                matchIds.add(cat.id.toString());
+                matchSlugs.add(cat.slug.trim().toLowerCase());
+              }
+            }
+            return baseFiltered.where((entry) {
+              final entryCat = entry.category.trim().toLowerCase();
+              if (matchNames.contains(entryCat)) return true;
+              if (matchSlugs.contains(entryCat)) return true;
+              if (matchIds.contains(entryCat)) return true;
+              return false;
+            }).toList();
+          }();
 
     if (_searchQuery.isEmpty) return categoryFiltered;
 
@@ -73,8 +90,22 @@ class _HomeScreenState extends State<HomeScreen> {
     }).toList();
   }
 
+  bool _matchesCategory(ProductCatalogEntry entry, String categoryLabel, List<Category> remoteCategories) {
+    final entryCat = entry.category.trim().toLowerCase();
+    final label = categoryLabel.trim().toLowerCase();
+    if (entryCat == label) return true;
+    if (entryCat == categoryLabel.trim().toLowerCase()) return true;
+    for (final cat in remoteCategories) {
+      if (cat.name.trim().toLowerCase() == label) {
+        if (entryCat == cat.id.toString()) return true;
+        if (entryCat == cat.slug.trim().toLowerCase()) return true;
+      }
+    }
+    return false;
+  }
+
   int _countProductsFor(
-      String categoryLabel, List<ProductCatalogEntry> source) {
+      String categoryLabel, List<ProductCatalogEntry> source, List<Category> remoteCategories) {
     final profileState = ProfileProvider.of(context);
     final isPartner = profileState.isAuthenticated && profileState.data.partnerId.trim().isNotEmpty;
 
@@ -84,7 +115,7 @@ class _HomeScreenState extends State<HomeScreen> {
     });
 
     if (categoryLabel == _allCategory) return filteredSource.length;
-    return filteredSource.where((entry) => entry.category == categoryLabel).length;
+    return filteredSource.where((entry) => _matchesCategory(entry, categoryLabel, remoteCategories)).length;
   }
 
   List<CategoryCardData> _buildCategoryCards(
@@ -96,7 +127,7 @@ class _HomeScreenState extends State<HomeScreen> {
         label: _allCategory,
         icon: Icons.auto_awesome,
         heroImage: '',
-        productCount: _countProductsFor(_allCategory, source),
+        productCount: _countProductsFor(_allCategory, source, remoteCategories),
       ),
     ];
 
@@ -118,7 +149,7 @@ class _HomeScreenState extends State<HomeScreen> {
         label: label,
         icon: _iconForCategory(label),
         heroImage: category.logoUrl ?? '',
-        productCount: _countProductsFor(label, source),
+        productCount: _countProductsFor(label, source, remoteCategories),
       ));
     }
 
@@ -174,7 +205,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final catalogState = ProductCatalogProvider.of(context);
     final sourceEntries = catalogState.entries;
     final remoteCategories = catalogState.categories;
-    final filteredProducts = _filteredProducts(sourceEntries);
+    final filteredProducts = _filteredProducts(sourceEntries, remoteCategories);
     final categoriesWithCounts =
         _buildCategoryCards(remoteCategories, sourceEntries);
     final isLoading = catalogState.isLoading && sourceEntries.isEmpty;
@@ -183,8 +214,7 @@ class _HomeScreenState extends State<HomeScreen> {
       backgroundColor: theme.colorScheme.surface,
       extendBody: false,
       bottomNavigationBar: const BottomNavBar(),
-      body: SafeArea(
-        child: RefreshIndicator(
+      body: RefreshIndicator(
           onRefresh: catalogState.refresh,
           displacement: 20,
           color: theme.colorScheme.primary,
@@ -202,10 +232,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: const HeroBanner(),
-                    ),
+                    const HeroBanner(),
                     const SizedBox(height: 16),
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 5),
@@ -350,7 +377,6 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
       ),
-    ),
   );
 }
 }
@@ -463,7 +489,7 @@ class _SectionIconButton extends StatelessWidget {
         color: selected
             ? primary.withValues(alpha: isDark ? 0.28 : 0.18)
             : (isDark ? const Color(0xFF0F172A) : const Color(0xFFE2E8F0)),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(
           color: selected
               ? primary.withValues(alpha: 0.65)
@@ -471,11 +497,11 @@ class _SectionIconButton extends StatelessWidget {
         ),
       ),
       child: IconButton(
-        icon: Icon(icon, size: 20),
+        icon: Icon(icon, size: 17),
         color: Theme.of(context).colorScheme.onSurface,
         style: IconButton.styleFrom(
           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          minimumSize: const Size(40, 40),
+          minimumSize: const Size(34, 34),
           padding: EdgeInsets.zero,
         ),
         onPressed: onPressed,

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'dart:async';
 
@@ -47,21 +48,28 @@ import 'services/api_client.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+    statusBarColor: Colors.transparent,
+    statusBarIconBrightness: Brightness.light,
+    systemNavigationBarColor: Colors.transparent,
+    systemNavigationBarDividerColor: Colors.transparent,
+  ));
   await dotenv.load(
     fileName: 'assets/dotenv',
     isOptional: true,
   );
-  runApp(const NetShopApp());
+  runApp(const ADKApp());
 }
 
-class NetShopApp extends StatefulWidget {
-  const NetShopApp({super.key});
+class ADKApp extends StatefulWidget {
+  const ADKApp({super.key});
 
   @override
-  State<NetShopApp> createState() => _NetShopAppState();
+  State<ADKApp> createState() => _ADKAppState();
 }
 
-class _NetShopAppState extends State<NetShopApp> {
+class _ADKAppState extends State<ADKApp> {
   final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
   late final DeepLinkService _deepLinks = DeepLinkService(_navigatorKey);
 
@@ -109,7 +117,7 @@ class _NetShopAppState extends State<NetShopApp> {
                 child: AnimatedBuilder(
                   animation: _themeController,
                   builder: (context, _) => MaterialApp(
-                    title: 'NetShop Partner Portal',
+                    title: 'ADK Partner Portal',
                     debugShowCheckedModeBanner: false,
                     theme: AppTheme.lightTheme,
                     darkTheme: AppTheme.darkTheme,
@@ -119,8 +127,8 @@ class _NetShopAppState extends State<NetShopApp> {
                     onGenerateRoute: (settings) {
                       final name = settings.name ?? '';
                       
-                      // Handle /product/ID deep links (especially for Web)
-                      if (name.startsWith('/product/')) {
+                      // Handle /product/ID or /members/product/ID deep links (especially for Web)
+                      if (name.contains('/product/')) {
                         final productId = name.split('/').last.trim();
                         if (productId.isNotEmpty) {
                           return MaterialPageRoute(
@@ -147,7 +155,9 @@ class _NetShopAppState extends State<NetShopApp> {
                       if (settings.name == BinaryTreeScreen.routeName) {
                         return MaterialPageRoute(
                           builder: (context) => BinaryTreeScreen(
-                            memberId: settings.arguments as String? ?? 'root',
+                            memberId: (settings.arguments as String? ?? '').trim().isNotEmpty
+                                ? settings.arguments as String
+                                : null,
                           ),
                         );
                       }

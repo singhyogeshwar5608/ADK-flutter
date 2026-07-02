@@ -13,6 +13,7 @@ import '../models/category.dart';
 import '../models/member_summary.dart';
 import '../models/member_tree.dart';
 import '../models/product.dart';
+import '../utils/error_message_helper.dart';
 import '../config/api_config.dart';
 import '../models/delivery_center.dart';
 import '../models/hero_slide.dart';
@@ -121,7 +122,7 @@ class ApiClient {
     for (final key in [
       _accessTokenStorageKey,
       'auth_token',
-      'netshop_access_token',
+      'adk_access_token',
       'token',
     ]) {
       final v = prefs.getString(key);
@@ -527,52 +528,53 @@ class ApiClient {
   Future<Map<String, dynamic>> fetchTeamStats() async {
     await ensureAuthenticated();
     final uri = _buildUri('auth/team-stats');
-    print('Fetching team stats from: $uri');
 
-    try {
-      final response = await _httpClient.get(
-        uri,
-        headers: _authorizedHeaders(),
-      );
-      print('Team stats response status: ${response.statusCode}');
-      print('Team stats response body: ${response.body}');
+    final response = await _httpClient.get(uri, headers: _authorizedHeaders());
 
-      _throwIfNeeded(response, context: 'Fetch team stats');
-      final decoded = jsonDecode(response.body) as Map<String, dynamic>;
-      print('Team stats parsed: $decoded');
-      return decoded;
-    } catch (e) {
-      print('Error loading team stats: $e');
-      rethrow;
+    if (response.statusCode == 401) {
+      _accessToken = null;
+      await _clearTokenFromStorage();
+      await restoreSessionFromStorage();
+      if (_accessToken != null) {
+        final retry = await _httpClient.get(uri, headers: _authorizedHeaders());
+        _throwIfNeeded(retry, context: 'Fetch team stats');
+        return jsonDecode(retry.body) as Map<String, dynamic>;
+      }
     }
+
+    _throwIfNeeded(response, context: 'Fetch team stats');
+    return jsonDecode(response.body) as Map<String, dynamic>;
   }
 
   Future<List<MemberSummary>> fetchTeamMembers({int limit = 1000}) async {
     await ensureAuthenticated();
     final uri = _buildUri('members/team', {'limit': '$limit'});
-    print('Fetching team members from: $uri');
 
-    try {
-      final response = await _httpClient.get(
-        uri,
-        headers: _authorizedHeaders(),
-      );
-      print('Team members response status: ${response.statusCode}');
-      print('Team members response body: ${response.body}');
+    final response = await _httpClient.get(uri, headers: _authorizedHeaders());
 
-      _throwIfNeeded(response, context: 'Fetch team members');
-      final decoded = jsonDecode(response.body) as Map<String, dynamic>;
-      final data = decoded['members'] as List<dynamic>? ?? const [];
-      print('Parsed ${data.length} team members');
-
-      return data
-          .whereType<Map<String, dynamic>>()
-          .map(MemberSummary.fromJson)
-          .toList(growable: false);
-    } catch (e) {
-      print('Error loading team members: $e');
-      rethrow;
+    if (response.statusCode == 401) {
+      _accessToken = null;
+      await _clearTokenFromStorage();
+      await restoreSessionFromStorage();
+      if (_accessToken != null) {
+        final retry = await _httpClient.get(uri, headers: _authorizedHeaders());
+        _throwIfNeeded(retry, context: 'Fetch team members');
+        final decoded = jsonDecode(retry.body) as Map<String, dynamic>;
+        final data = decoded['members'] as List<dynamic>? ?? const [];
+        return data
+            .whereType<Map<String, dynamic>>()
+            .map(MemberSummary.fromJson)
+            .toList(growable: false);
+      }
     }
+
+    _throwIfNeeded(response, context: 'Fetch team members');
+    final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+    final data = decoded['members'] as List<dynamic>? ?? const [];
+    return data
+        .whereType<Map<String, dynamic>>()
+        .map(MemberSummary.fromJson)
+        .toList(growable: false);
   }
 
   Map<String, String> _authorizedHeaders() {
@@ -647,6 +649,29 @@ class ApiClient {
       }),
     );
 
+    // If 422 (validation error), retry with login_as_admin flag for admin accounts
+    if (response.statusCode == 422) {
+      final retry = await _httpClient.post(
+        uri,
+        headers: ApiConfig.jsonHeaders,
+        body: jsonEncode({
+          'email': email.trim().toLowerCase(),
+          'password': password,
+          'login_as_admin': true,
+        }),
+      );
+      if (retry.statusCode >= 200 && retry.statusCode < 300) {
+        final decoded = jsonDecode(retry.body) as Map<String, dynamic>;
+        final token = decoded['accessToken'] as String?;
+        if (token == null || token.isEmpty) {
+          throw Exception('Login response missing access token');
+        }
+        _accessToken = token;
+        await _saveTokenToStorage(token);
+        return;
+      }
+    }
+
     _throwIfNeeded(response, context: 'Login');
 
     final decoded = jsonDecode(response.body) as Map<String, dynamic>;
@@ -671,7 +696,17 @@ class ApiClient {
     }
 
     final uri = _buildUri('auth/me');
-    final response = await _httpClient.get(uri, headers: _authorizedHeaders());
+    var response = await _httpClient.get(uri, headers: _authorizedHeaders());
+
+    if (response.statusCode == 401) {
+      _accessToken = null;
+      await _clearTokenFromStorage();
+      if (autoAuthenticate) {
+        await ensureAuthenticated();
+        response = await _httpClient.get(uri, headers: _authorizedHeaders());
+      }
+    }
+
     _throwIfNeeded(response, context: 'Fetch current user');
 
     final decoded = jsonDecode(response.body) as Map<String, dynamic>;
@@ -822,20 +857,36 @@ class ApiClient {
     _throwIfNeeded(response, context: 'Register member');
   }
 
+  Future<List<Map<String, dynamic>>> searchMembers(String query) async {
+    final uri = _buildUri('members/public', {'search': query, 'limit': '20'});
+    final response = await _httpClient.get(uri, headers: ApiConfig.jsonHeaders);
+    if (response.statusCode == 200) {
+      final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+      final members = decoded['members'] as List<dynamic>? ?? [];
+      return members.whereType<Map<String, dynamic>>().toList();
+    }
+    return [];
+  }
+
   Future<MemberTree> fetchMemberTree({
     required String memberId,
     int depth = 3,
   }) async {
-    print('📡 API: Fetching member tree for $memberId with depth $depth');
     await ensureAuthenticated();
     final uri = _buildUri('members/$memberId/tree', {'depth': '$depth'});
-    print('📡 API: Request URL: $uri');
-    final response = await _httpClient.get(uri, headers: _authorizedHeaders());
-    print('📡 API: Response status: ${response.statusCode}');
+    var response = await _httpClient.get(uri, headers: _authorizedHeaders());
+
+    if (response.statusCode == 401) {
+      _accessToken = null;
+      await _clearTokenFromStorage();
+      throw Exception(
+        'Your session has expired or you do not have permission to view this tree. '
+        'Please log in again and ensure you have an active account.',
+      );
+    }
+
     _throwIfNeeded(response, context: 'Fetch member tree');
     final decoded = jsonDecode(response.body) as Map<String, dynamic>;
-    print(
-        '📡 API: Response parsed, nodes count: ${(decoded['nodes'] as List?)?.length ?? 0}');
     return MemberTree.fromJson(decoded);
   }
 
@@ -864,8 +915,10 @@ class ApiClient {
     if (response.statusCode == 401) {
       _accessToken = null;
     }
-    throw Exception(
-        '$context failed (${response.statusCode}): ${response.body}');
+    final friendly = parseApiError(
+      '$context (${response.statusCode}): ${response.body}',
+    );
+    throw Exception(friendly);
   }
 
   Future<Map<String, dynamic>> getIncomeTransactions(String memberId) async {
@@ -928,6 +981,7 @@ class ApiClient {
       'password': password,
       'sponsorId': sponsorId,
       'leg': leg,
+      'status': 'pending',
       if (phone != null) 'phone': phone,
       'address': address,
       if (profileImage != null) 'profileImage': profileImage,

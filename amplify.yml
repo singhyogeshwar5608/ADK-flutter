@@ -1,0 +1,57 @@
+version: 1
+frontend:
+  phases:
+    build:
+      commands: []
+  artifacts:
+    baseDirectory: dist
+    files:
+      - '**/*'
+  cache:
+    paths: []
+  customRules:
+    - source: /.well-known/assetlinks.json
+      target: /.well-known/assetlinks.json
+      status: '200'
+    # Signup bridge
+    - source: /signup
+      target: /signup/index.html
+      status: '200'
+    - source: /signup/
+      target: /signup/index.html
+      status: '200'
+    - source: /members/signup
+      target: /members/signup/index.html
+      status: '200'
+    - source: /members/signup/
+      target: /members/signup/index.html
+      status: '200'
+    # Wishlist deep links
+    - source: /wishlist
+      target: /wishlist/index.html
+      status: '200'
+    - source: /wishlist/*
+      target: /wishlist/index.html
+      status: '200'
+    - source: /w/*
+      target: /wishlist/index.html
+      status: '200'
+    - source: /members/wishlist
+      target: /members/wishlist/index.html
+      status: '200'
+    - source: /members/wishlist/*
+      target: /members/wishlist/index.html
+      status: '200'
+    - source: /members/w
+      target: /members/wishlist/index.html
+      status: '200'
+    - source: /members/w/*
+      target: /members/wishlist/index.html
+      status: '200'
+    # Product deep links
+    - source: /product/*
+      target: /product/index.html
+      status: '200'
+    - source: /members/product/*
+      target: /members/product/index.html
+      status: '200'

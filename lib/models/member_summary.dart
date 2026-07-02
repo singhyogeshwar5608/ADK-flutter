@@ -10,6 +10,8 @@ class MemberSummary {
     this.profileImage,
     this.qrCodeUrl,
     this.teamSize,
+    this.activeTeam,
+    this.inactiveTeam,
     this.totalBv,
     this.totalTeamBV,
     this.bvLeftLeg,
@@ -19,6 +21,7 @@ class MemberSummary {
     this.contactPhone,
     this.walletBalance,
     this.createdAt,
+    this.type,
   });
 
   final String id;
@@ -29,6 +32,8 @@ class MemberSummary {
   final String? profileImage;
   final String? qrCodeUrl;
   final int? teamSize;
+  final int? activeTeam;
+  final int? inactiveTeam;
   final double? totalBv;
   final double? totalTeamBV;
   final double? bvLeftLeg;
@@ -38,6 +43,7 @@ class MemberSummary {
   final String? contactPhone;
   final String? walletBalance;
   final String? createdAt;
+  final String? type;
 
   factory MemberSummary.fromJson(Map<String, dynamic> json) {
     final fullName = json['fullName'] ?? json['name'];
@@ -50,6 +56,8 @@ class MemberSummary {
       profileImage: _normProfile(json['profileImage']?.toString()),
       qrCodeUrl: _normProfile(json['qrCodeUrl']?.toString()),
       teamSize: json['stats']?['teamSize'] as int? ?? json['teamSize'] as int?,
+      activeTeam: json['stats']?['activeTeam'] as int?,
+      inactiveTeam: json['stats']?['inactiveTeam'] as int?,
       totalBv: (json['totalBv'] as num?)?.toDouble(),
       totalTeamBV: (json['stats']?['totalTeamBV'] as num?)?.toDouble(),
       bvLeftLeg: (json['bvLeftLeg'] as num?)?.toDouble(),
@@ -61,6 +69,7 @@ class MemberSummary {
       walletBalance: json['wallet']?['balance']?.toString() ??
           json['walletBalance']?.toString(),
       createdAt: json['createdAt']?.toString(),
+      type: json['type']?.toString(),
     );
   }
 

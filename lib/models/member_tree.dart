@@ -4,6 +4,7 @@ class MemberNode {
     required this.memberId,
     required this.fullName,
     required this.role,
+    required this.type,
     required this.status,
     required this.placementPath,
     required this.depth,
@@ -13,12 +14,15 @@ class MemberNode {
     this.sponsorId,
     this.email,
     this.phone,
+    this.address,
     this.walletBalance = 0,
     this.walletTotalEarned = 0,
     this.bvTotal = 0,
     this.bvLeftLeg = 0,
     this.bvRightLeg = 0,
     this.teamSize = 0,
+    this.activeTeam = 0,
+    this.inactiveTeam = 0,
     this.createdAt,
     this.updatedAt,
   });
@@ -27,6 +31,7 @@ class MemberNode {
   final String memberId;
   final String fullName;
   final String role;
+  final String type;
   final String status;
   final String placementPath;
   final int depth;
@@ -36,12 +41,15 @@ class MemberNode {
   final String? sponsorId;
   final String? email;
   final String? phone;
+  final String? address;
   final double walletBalance;
   final double walletTotalEarned;
   final double bvTotal;
   final double bvLeftLeg;
   final double bvRightLeg;
   final int teamSize;
+  final int activeTeam;
+  final int inactiveTeam;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -62,6 +70,7 @@ class MemberNode {
       memberId: (json['memberId'] ?? '').toString(),
       fullName: (json['fullName'] ?? '').toString(),
       role: (json['role'] ?? '').toString(),
+      type: (json['type'] ?? 'USER').toString(),
       status: (json['status'] ?? '').toString(),
       placementPath: (json['placementPath'] ?? '').toString(),
       depth: (json['depth'] as num?)?.toInt() ?? 0,
@@ -71,12 +80,15 @@ class MemberNode {
       sponsorId: json['sponsorId'] as String?,
       email: json['email'] as String?,
       phone: json['phone'] as String?,
+      address: json['address'] as String?,
       walletBalance: (wallet?['balance'] as num?)?.toDouble() ?? 0,
       walletTotalEarned: (wallet?['totalEarned'] as num?)?.toDouble() ?? 0,
       bvTotal: (bv?['total'] as num?)?.toDouble() ?? 0,
       bvLeftLeg: (bv?['leftLeg'] as num?)?.toDouble() ?? 0,
       bvRightLeg: (bv?['rightLeg'] as num?)?.toDouble() ?? 0,
       teamSize: (stats?['teamSize'] as num?)?.toInt() ?? 0,
+      activeTeam: (stats?['activeTeam'] as num?)?.toInt() ?? 0,
+      inactiveTeam: (stats?['inactiveTeam'] as num?)?.toInt() ?? 0,
       createdAt: parseDate(json['createdAt']),
       updatedAt: parseDate(json['updatedAt']),
     );
@@ -101,8 +113,6 @@ class MemberTree {
         .map(MemberNode.fromJson)
         .toList();
 
-    final allNodes = <MemberNode>{root, ...nodes};
-
     final depthLimitValue = json['meta']?['depthLimit'];
     int depthLimit = 3;
     if (depthLimitValue is num) {
@@ -111,9 +121,13 @@ class MemberTree {
       depthLimit = int.tryParse(depthLimitValue) ?? 3;
     }
 
+    // Remove duplicate root if backend includes it in nodes list
+    final seenPaths = <String>{root.placementPath};
+    final uniqueNodes = [root, ...nodes.where((n) => seenPaths.add(n.placementPath))];
+
     return MemberTree(
       root: root,
-      nodes: allNodes.toList(growable: false),
+      nodes: uniqueNodes,
       depthLimit: depthLimit,
     );
   }

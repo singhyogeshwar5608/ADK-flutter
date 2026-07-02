@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../models/product.dart';
-import '../navigation/checkout_arguments.dart';
-import '../screens/customer_details_screen.dart';
 import '../state/cart_state.dart';
 import '../state/wishlist_state.dart';
 import '../theme/app_theme.dart';
@@ -98,9 +96,9 @@ class _ProductCardState extends State<ProductCard> {
             : Colors.white.withValues(alpha: 0.15);
 
         Widget buildImageSection() {
-          final commissionPercent = widget.product.commissionPercent;
-          final commissionLabel = commissionPercent > 0
-              ? '${commissionPercent.round()}% OFF'
+          final discountPercent = widget.product.discountPercentage;
+          final discountLabel = discountPercent > 0
+              ? '${discountPercent.round()}% OFF'
               : null;
           final images = _images;
           // [InkWell] only around the pager; wishlist sits above in paint/hit-test order so it receives taps first.
@@ -130,11 +128,17 @@ class _ProductCardState extends State<ProductCard> {
           final imageStack = Stack(
             children: [
               Positioned.fill(
-                child: ClipRRect(
-                  borderRadius:
-                      const BorderRadius.vertical(top: Radius.circular(18)),
-                  child: Container(
+                child: Container(
+                  decoration: BoxDecoration(
                     color: theme.colorScheme.surface,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                      width: 1.0,
+                    ),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(11),
                     child: pageGallery,
                   ),
                 ),
@@ -154,7 +158,7 @@ class _ProductCardState extends State<ProductCard> {
                         ],
                       ),
                       borderRadius: const BorderRadius.only(
-                        topLeft: Radius.circular(18),
+                        topLeft: Radius.circular(12),
                         bottomRight: Radius.circular(12),
                       ),
                       boxShadow: [
@@ -281,26 +285,37 @@ class _ProductCardState extends State<ProductCard> {
                     }),
                   ),
                 ),
-              if (commissionLabel != null)
+              if (discountLabel != null)
                 Positioned(
                   left: 12,
                   bottom: 12,
                   child: Container(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
+                      horizontal: 7,
+                      vertical: 3,
                     ),
                     decoration: BoxDecoration(
-                      color: AppColors.mlmGreen.withValues(alpha: 0.92),
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFFEF4444), Color(0xFFDC2626)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
                       borderRadius: BorderRadius.circular(8),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFFEF4444).withValues(alpha: 0.4),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
                     ),
                     child: Text(
-                      commissionLabel,
+                      discountLabel,
                       style: const TextStyle(
                         color: Colors.white,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 10,
-                        letterSpacing: 0.4,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 9,
+                        letterSpacing: 0.5,
                       ),
                     ),
                   ),
@@ -323,10 +338,10 @@ class _ProductCardState extends State<ProductCard> {
           fontWeight: FontWeight.w700,
           fontSize: isCompactCard ? 10 : null,
         );
-        final priceStyle = theme.textTheme.titleSmall?.copyWith(
-          color: theme.colorScheme.primary,
+        final priceStyle = theme.textTheme.labelSmall?.copyWith(
+          color: isDark ? Colors.white : Colors.black,
           fontWeight: FontWeight.w700,
-          fontSize: isCompactCard ? 14 : null,
+          fontSize: isCompactCard ? 11 : null,
         );
         final bvStyle = theme.textTheme.labelSmall?.copyWith(
           color: AppColors.mlmGreen,
@@ -348,6 +363,7 @@ class _ProductCardState extends State<ProductCard> {
           required String label,
           required VoidCallback? onPressed,
           Color? filledBackgroundOverride,
+          Color? outlineColorOverride,
         }) {
           final isDisabled = onPressed == null;
           final fillBg = isDisabled
@@ -356,12 +372,13 @@ class _ProductCardState extends State<ProductCard> {
           final fillFg = isDisabled
               ? theme.disabledColor
               : Colors.white;
+          final outlineColor = outlineColorOverride ?? theme.colorScheme.primary;
           final labelStyle = TextStyle(
             fontSize: btnLabelSize,
             fontWeight: FontWeight.w700,
             color: filled 
                 ? fillFg 
-                : (isDisabled ? theme.disabledColor : theme.colorScheme.primary),
+                : (isDisabled ? theme.disabledColor : outlineColor),
           );
           final content = Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -372,7 +389,7 @@ class _ProductCardState extends State<ProductCard> {
                 size: btnIconSize,
                 color: filled 
                     ? fillFg 
-                    : (isDisabled ? theme.disabledColor : theme.colorScheme.primary),
+                    : (isDisabled ? theme.disabledColor : outlineColor),
               ),
               SizedBox(width: isCompactCard ? 3 : 5),
               Flexible(
@@ -399,14 +416,14 @@ class _ProductCardState extends State<ProductCard> {
                   vertical: btnPadV,
                   horizontal: btnPadH,
                 ),
-                minimumSize: const Size(0, 0),
+                minimumSize: const Size(0, 36),
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 backgroundColor: fillBg,
                 foregroundColor: fillFg,
                 disabledBackgroundColor: theme.disabledColor.withValues(alpha: 0.12),
                 disabledForegroundColor: theme.disabledColor,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(24),
                 ),
               ),
               child: content,
@@ -419,13 +436,14 @@ class _ProductCardState extends State<ProductCard> {
                 vertical: btnPadV,
                 horizontal: btnPadH,
               ),
-              minimumSize: const Size(0, 0),
+              minimumSize: const Size(0, 36),
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               side: BorderSide(
-                color: isDisabled ? theme.disabledColor : theme.colorScheme.primary,
+                color: isDisabled ? theme.disabledColor : outlineColor,
+                width: 1.2,
               ),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(24),
               ),
             ),
             child: content,
@@ -433,143 +451,156 @@ class _ProductCardState extends State<ProductCard> {
         }
 
         return Container(
-          decoration: BoxDecoration(
-            color: theme.cardColor,
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(
-              color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0),
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: isDark ? 0.06 : 0.08),
-                blurRadius: 20,
-                offset: const Offset(0, 6),
-              ),
-            ],
+          decoration: const BoxDecoration(
+            color: Colors.transparent,
           ),
           child: Builder(
             builder: (context) {
-              Widget info = Padding(
-                padding: bodyPadding,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      widget.product.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: titleStyle,
-                    ),
-                    SizedBox(height: smallGap),
-                    if (originalPrice != null)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 2),
-                        child: Text(
-                          '₹${originalPrice.toStringAsFixed(2)}',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurface
-                                .withValues(alpha: 0.5),
-                            decoration: TextDecoration.lineThrough,
-                            fontSize: isCompactCard ? 11 : 12,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              Widget info = Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: bodyPadding.copyWith(bottom: 0, left: 4, right: 4),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(
-                          child: Text(
-                            '₹${finalPrice.toStringAsFixed(2)}',
-                            key: ValueKey('price_${widget.product.id}_${finalPrice}'),
-                            style: priceStyle,
-                            overflow: TextOverflow.ellipsis,
-                          ),
+                        Text(
+                          widget.product.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: titleStyle,
                         ),
-                        const SizedBox(width: 8),
+                        SizedBox(height: smallGap),
+                        if (originalPrice != null)
+                          Row(
+                            children: [
+                              Text(
+                                '₹${originalPrice.toStringAsFixed(0)}',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: theme.colorScheme.onSurface
+                                      .withValues(alpha: 0.45),
+                                  decoration: TextDecoration.lineThrough,
+                                  fontSize: isCompactCard ? 10 : 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              if (widget.product.discountPercentage > 0) ...[
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFFEF2F2),
+                                    borderRadius: BorderRadius.circular(4),
+                                    border: Border.all(
+                                      color: const Color(0xFFFECACA),
+                                    ),
+                                  ),
+                                  child: Text(
+                                    '${widget.product.discountPercentage.round()}% OFF',
+                                    style: const TextStyle(
+                                      color: Color(0xFFDC2626),
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 9,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        SizedBox(height: isCompactCard ? 4 : 6),
                         Row(
-                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
-                            const Icon(
-                              Icons.token,
-                              size: 16,
-                              color: AppColors.mlmGreen,
-                            ),
-                            const SizedBox(width: 4),
                             Text(
-                              '${widget.product.bv} BV',
-                              key: ValueKey('bv_${widget.product.id}_${widget.product.bv}'),
-                              style: bvStyle,
+                              '₹${finalPrice.toStringAsFixed(0)}',
+                              key: ValueKey('price_${widget.product.id}_${finalPrice}'),
+                              style: priceStyle?.copyWith(
+                                fontSize: isCompactCard ? 13 : 15,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            const Spacer(),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.token,
+                                  size: 14,
+                                  color: AppColors.mlmGreen,
+                                ),
+                                const SizedBox(width: 3),
+                                Text(
+                                  '${widget.product.bv} BV',
+                                  key: ValueKey('bv_${widget.product.id}_${widget.product.bv}'),
+                                  style: bvStyle,
+                                ),
+                              ],
                             ),
                           ],
                         ),
+                        if (originalPrice != null)
+                          Padding(
+                            padding: EdgeInsets.only(
+                              top: isCompactCard ? 4 : 6,
+                            ),
+                            child: Text(
+                              'Save ₹${(widget.product.totalPrice - finalPrice).toStringAsFixed(0)}',
+                              style: TextStyle(
+                                color: const Color(0xFF059669),
+                                fontWeight: FontWeight.w700,
+                                fontSize: isCompactCard ? 10 : 11,
+                              ),
+                            ),
+                          ),
                       ],
                     ),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: buildActionButton(
-                            filled: true,
-                            icon: inCart
-                                ? Icons.shopping_cart_rounded
-                                : Icons.shopping_cart_outlined,
-                            label: inCart ? 'In Cart' : 'Add to Cart',
-                            filledBackgroundOverride: inCart
-                                ? const Color(0xFF059669)
-                                : const Color(0xFF0891B2),
-                            onPressed: widget.product.isComingSoon
-                                ? null
-                                : () {
-                                    CartProvider.of(context, listen: false)
-                                        .addProduct(widget.product);
-                              if (!context.mounted) return;
-                              ScaffoldMessenger.of(context)
-                                ..hideCurrentSnackBar()
-                                ..showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                      inCart
-                                          ? 'Quantity updated — this item is in your cart.'
-                                          : 'This item has been added to your cart.',
-                                      style:
-                                          theme.textTheme.bodyMedium?.copyWith(
-                                        color:
-                                            Colors.white.withValues(alpha: 0.98),
-                                        fontWeight: FontWeight.w600,
+                  ),
+                  const SizedBox(height: 10),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: buildActionButton(
+                        filled: false,
+                        icon: inCart
+                            ? Icons.shopping_cart_rounded
+                            : Icons.shopping_cart_outlined,
+                        label: inCart ? 'In Cart' : 'Add to Cart',
+                        outlineColorOverride: inCart
+                            ? const Color(0xFF059669)
+                            : theme.colorScheme.primary,
+                        onPressed: widget.product.isComingSoon
+                            ? null
+                            : () {
+                                CartProvider.of(context, listen: false)
+                                    .addProduct(widget.product);
+                                if (!context.mounted) return;
+                                ScaffoldMessenger.of(context)
+                                  ..hideCurrentSnackBar()
+                                  ..showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        inCart
+                                            ? 'Quantity updated — this item is in your cart.'
+                                            : 'This item has been added to your cart.',
+                                        style: theme.textTheme.bodyMedium?.copyWith(
+                                          color: Colors.white.withValues(alpha: 0.98),
+                                          fontWeight: FontWeight.w600,
+                                        ),
                                       ),
+                                      backgroundColor: theme.colorScheme.inverseSurface,
+                                      behavior: SnackBarBehavior.floating,
+                                      duration: const Duration(seconds: 2),
                                     ),
-                                    backgroundColor:
-                                        theme.colorScheme.inverseSurface,
-                                    behavior: SnackBarBehavior.floating,
-                                    duration: const Duration(seconds: 2),
-                                  ),
-                                );
-                            },
-                          ),
-                        ),
-                        SizedBox(width: isCompactCard ? 4 : 6),
-                        Expanded(
-                          child: buildActionButton(
-                            filled: true,
-                            icon: Icons.bolt_rounded,
-                            label: 'Buy Now',
-                            onPressed: widget.product.isComingSoon
-                                ? null
-                                : () {
-                                    Navigator.of(context).pushNamed(
-                                      CustomerDetailsScreen.routeName,
-                                      arguments: CheckoutArguments(
-                                        product: widget.product,
-                                        quantity: 1,
-                                      ),
-                                    );
-                                  },
-                          ),
-                        ),
-                      ],
+                                  );
+                              },
+                      ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               );
               if (widget.onProductTap != null) {
                 info = Material(

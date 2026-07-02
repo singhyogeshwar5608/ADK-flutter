@@ -308,7 +308,6 @@ class _MyTeamBody extends StatelessWidget {
             const SizedBox(height: 20),
             _TeamStatsGrid(
               activeMembers: totalActive,
-              newThisWeek: newThisWeek,
               pendingKyc: pendingKyc,
             ),
             const SizedBox(height: 24),
@@ -358,13 +357,15 @@ class _MyTeamBody extends StatelessWidget {
     return MemberDetailArguments(
       memberId: member.memberId,
       name: member.fullName,
-      role: 'Member',
-      rankLabel: 'MEMBER',
+      role: member.type == 'LEADER' ? 'Leader' : 'User',
+      rankLabel: member.type == 'LEADER' ? 'LEADER' : 'USER',
       rankColor: const Color(0xFF2B9DEE),
       avatarUrl: member.profileImage ?? '',
       status: member.status?.toLowerCase() ?? 'active',
       totalBv: member.totalTeamBV?.toInt() ?? 0,
       teamSize: member.teamSize ?? 0,
+      activeTeam: member.activeTeam ?? 0,
+      inactiveTeam: member.inactiveTeam ?? 0,
       weakLeg: weakLeg,
       location: member.location ?? 'Not specified',
       contactEmail: member.email ?? 'n/a',
@@ -608,12 +609,10 @@ class _OverviewStatCard extends StatelessWidget {
 class _TeamStatsGrid extends StatelessWidget {
   _TeamStatsGrid({
     required this.activeMembers,
-    required this.newThisWeek,
     required this.pendingKyc,
   });
 
   final int activeMembers;
-  final int newThisWeek;
   final int pendingKyc;
 
   @override
@@ -626,15 +625,6 @@ class _TeamStatsGrid extends StatelessWidget {
             label: 'Active Members',
             value: activeMembers.toString(),
             color: const Color(0xFF10B981),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: _StatCard(
-            icon: Icons.person_add,
-            label: 'New This Week',
-            value: newThisWeek.toString(),
-            color: const Color(0xFF2B9DEE),
           ),
         ),
         const SizedBox(width: 8),

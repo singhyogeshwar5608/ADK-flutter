@@ -2,9 +2,166 @@ import 'package:flutter/material.dart';
 
 import '../models/member_tree.dart';
 import '../services/api_client.dart';
+import '../state/profile_state.dart';
 import '../widgets/safe_network_image.dart';
 import 'member_detail_screen.dart';
 import 'register_member_screen.dart';
+
+// ---------------------------------------------------------------------------
+// Layout constants — all nodes share the exact same dimensions
+// ---------------------------------------------------------------------------
+const double _nodeWidth = 80;
+const double _nodeHeight = 54;
+const double _hGap = 8;
+const double _vGap = 10;
+const double _padding = 12;
+
+// ---------------------------------------------------------------------------
+// Internal layout node
+// ---------------------------------------------------------------------------
+class _LayoutNode {
+  final MemberNode member;
+  _LayoutNode? left;
+  _LayoutNode? right;
+  double x = 0; // centre x, global
+  double y = 0; // top y, global
+  double subtreeW = _nodeWidth;
+
+  _LayoutNode({required this.member});
+}
+
+// ---------------------------------------------------------------------------
+// Build the layout tree from the flat pathMap  (step 1)
+// ---------------------------------------------------------------------------
+_LayoutNode _buildLayoutTree(
+  MemberNode node,
+  Map<String, MemberNode> pathMap,
+  int maxDepth,
+) {
+  final ln = _LayoutNode(member: node);
+  final childDepth = node.depth + 1;
+  if (childDepth > maxDepth) return ln;
+
+  final lp = '${node.placementPath}.L', rp = '${node.placementPath}.R';
+  if (pathMap.containsKey(lp)) ln.left = _buildLayoutTree(pathMap[lp]!, pathMap, maxDepth);
+  if (pathMap.containsKey(rp)) ln.right = _buildLayoutTree(pathMap[rp]!, pathMap, maxDepth);
+  return ln;
+}
+
+// ---------------------------------------------------------------------------
+// First pass bottom-up: compute subtree widths (step 2)
+// ---------------------------------------------------------------------------
+double _calcWidths(_LayoutNode n, int maxDepth) {
+  final below = n.member.depth + 1 <= maxDepth;
+  final lw = n.left != null ? _calcWidths(n.left!, maxDepth) : 0.0;
+  final rw = n.right != null ? _calcWidths(n.right!, maxDepth) : 0.0;
+
+  final spaceL = below && n.left == null ? _nodeWidth : lw;
+  final spaceR = below && n.right == null ? _nodeWidth : rw;
+
+  double total = 0;
+  if (spaceL > 0 && spaceR > 0) {
+    total = spaceL + _hGap + spaceR;
+  } else {
+    total = spaceL + spaceR;
+  }
+  n.subtreeW = total > _nodeWidth ? total : _nodeWidth;
+  return n.subtreeW;
+}
+
+// ---------------------------------------------------------------------------
+// Second pass top-down: assign x,y positions (step 3)
+// ---------------------------------------------------------------------------
+void _assignYs(_LayoutNode n, double y) {
+  n.y = y;
+  if (n.left != null) _assignYs(n.left!, y + _nodeHeight + _vGap);
+  if (n.right != null) _assignYs(n.right!, y + _nodeHeight + _vGap);
+}
+
+void _assignXs(_LayoutNode n, int maxDepth) {
+  final below = n.member.depth + 1 <= maxDepth;
+  final spaceL = below && n.left == null ? _nodeWidth : (n.left?.subtreeW ?? 0);
+  final spaceR = below && n.right == null ? _nodeWidth : (n.right?.subtreeW ?? 0);
+  final both = spaceL > 0 && spaceR > 0;
+
+  if (both) {
+    final span = spaceL + _hGap + spaceR;
+    if (n.left != null) {
+      n.left!.x = n.x - span / 2 + spaceL / 2;
+      _assignXs(n.left!, maxDepth);
+    }
+    if (n.right != null) {
+      n.right!.x = n.x + span / 2 - spaceR / 2;
+      _assignXs(n.right!, maxDepth);
+    }
+  } else {
+    if (n.left != null) {
+      n.left!.x = n.x;
+      _assignXs(n.left!, maxDepth);
+    }
+    if (n.right != null) {
+      n.right!.x = n.x;
+      _assignXs(n.right!, maxDepth);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Collect all rendered positions (real nodes + empty slots)
+// ---------------------------------------------------------------------------
+class _SlotPos {
+  const _SlotPos({required this.x, required this.y, required this.isLeft, required this.parentPath});
+  final double x, y;
+  final bool isLeft;
+  final String parentPath;
+}
+
+void _collectSlots(_LayoutNode n, int maxDepth, List<_SlotPos> out) {
+  final below = n.member.depth + 1 <= maxDepth;
+  if (!below) {
+    if (n.left != null) _collectSlots(n.left!, maxDepth, out);
+    if (n.right != null) _collectSlots(n.right!, maxDepth, out);
+    return;
+  }
+
+  final hasLeft = n.left != null;
+  final hasRight = n.right != null;
+  final childY = n.y + _nodeHeight + _vGap;
+
+  final leftW = hasLeft ? n.left!.subtreeW : _nodeWidth;
+  final rightW = hasRight ? n.right!.subtreeW : _nodeWidth;
+  final both = leftW > 0 && rightW > 0;
+  final span = both ? leftW + _hGap + rightW : (leftW > 0 ? leftW : (rightW > 0 ? rightW : 0));
+
+  if (!hasLeft) {
+    final sx = both ? n.x - span / 2 + leftW / 2 : n.x;
+    out.add(_SlotPos(x: sx, y: childY, isLeft: true, parentPath: n.member.placementPath));
+  }
+  if (!hasRight) {
+    final sx = both ? n.x + span / 2 - rightW / 2 : n.x;
+    out.add(_SlotPos(x: sx, y: childY, isLeft: false, parentPath: n.member.placementPath));
+  }
+
+  if (n.left != null) _collectSlots(n.left!, maxDepth, out);
+  if (n.right != null) _collectSlots(n.right!, maxDepth, out);
+}
+
+// What we need to render: real node at each layout node.
+// The layout is a single level – we collect everything into a flat list.
+Map<String, _LayoutNode> _flatten(_LayoutNode root) {
+  final out = <String, _LayoutNode>{};
+  void walk(_LayoutNode n) {
+    out[n.member.placementPath] = n;
+    if (n.left != null) walk(n.left!);
+    if (n.right != null) walk(n.right!);
+  }
+  walk(root);
+  return out;
+}
+
+// ===========================================================================
+// Screen
+// ===========================================================================
 
 class BinaryTreeScreen extends StatefulWidget {
   const BinaryTreeScreen({super.key, this.memberId, this.depthLimit = 10});
@@ -21,27 +178,19 @@ class BinaryTreeScreen extends StatefulWidget {
 class _BinaryTreeScreenState extends State<BinaryTreeScreen> {
   late Future<MemberTree> _future;
   late String _currentRoot;
-  final TransformationController _transformationController =
-      TransformationController();
+  final TransformationController _transformationController = TransformationController();
   double _currentScale = 1.0;
 
   @override
   void initState() {
     super.initState();
-    _currentRoot = widget.memberId ?? 'root';
-    print(
-        'BinaryTreeScreen: Initialized with memberId: ${widget.memberId}, _currentRoot: $_currentRoot');
+    _currentRoot = widget.memberId ?? _resolveMemberId();
     _future = _loadTree();
-
-    // Add listener to track scale changes from user interactions
     _transformationController.addListener(() {
       if (!mounted) return;
-      final matrix = _transformationController.value;
-      final scale = matrix.getMaxScaleOnAxis();
-      if (!scale.isNaN && scale != _currentScale) {
-        setState(() {
-          _currentScale = scale.clamp(0.1, 3.0);
-        });
+      final s = _transformationController.value.getMaxScaleOnAxis();
+      if (!s.isNaN && s != _currentScale) {
+        setState(() => _currentScale = s.clamp(0.1, 3.0));
       }
     });
   }
@@ -53,103 +202,85 @@ class _BinaryTreeScreenState extends State<BinaryTreeScreen> {
   }
 
   void _zoomIn() {
-    setState(() {
-      _currentScale = (_currentScale * 1.5).clamp(0.1, 3.0);
-      if (_currentScale.isNaN) _currentScale = 1.0;
-      _transformationController.value = Matrix4.identity()
-        ..scale(_currentScale);
-    });
+    _currentScale = (_currentScale * 1.5).clamp(0.1, 3.0);
+    if (_currentScale.isNaN) _currentScale = 1.0;
+    _transformationController.value = Matrix4.identity()..scale(_currentScale);
   }
 
   void _zoomOut() {
-    setState(() {
-      _currentScale = (_currentScale / 1.5).clamp(0.1, 3.0);
-      if (_currentScale.isNaN) _currentScale = 1.0;
-      _transformationController.value = Matrix4.identity()
-        ..scale(_currentScale);
-    });
+    _currentScale = (_currentScale / 1.5).clamp(0.1, 3.0);
+    if (_currentScale.isNaN) _currentScale = 1.0;
+    _transformationController.value = Matrix4.identity()..scale(_currentScale);
   }
 
   void _resetZoom() {
-    setState(() {
-      _currentScale = 1.0;
-      _transformationController.value = Matrix4.identity();
-    });
+    _currentScale = 1.0;
+    _transformationController.value = Matrix4.identity();
   }
 
   Future<MemberTree> _loadTree() async {
-    print(
-        '🌳 Loading binary tree for member: $_currentRoot, depth: ${widget.depthLimit}');
     try {
-      final tree = await ApiClient.instance.fetchMemberTree(
+      return await ApiClient.instance.fetchMemberTree(
         memberId: _currentRoot,
         depth: widget.depthLimit,
       );
-      print('✅ Tree loaded successfully: ${tree.nodes.length} nodes');
-      print('Root: ${tree.root.fullName}, Depth limit: ${tree.depthLimit}');
-      return tree;
-    } catch (e, stack) {
-      print('❌ Error loading tree: $e');
-      print('Stack trace: $stack');
+    } catch (_) {
       rethrow;
     }
   }
 
   Future<void> _refresh() async {
-    setState(() {
-      _future = _loadTree();
-    });
+    setState(() => _future = _loadTree());
     await _future;
+  }
+
+  String _resolveMemberId() {
+    try {
+      final pid = ProfileProvider.of(context, listen: false).data.partnerId.trim();
+      if (pid.isNotEmpty) return pid;
+    } catch (_) {}
+    return '';
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final background =
-        isDark ? const Color(0xFF101A22) : const Color(0xFFF6F7F8);
+    final background = isDark ? const Color(0xFF101A22) : const Color(0xFFF6F7F8);
 
     return Scaffold(
       backgroundColor: background,
       appBar: AppBar(
+        automaticallyImplyLeading: true,
         title: Row(
           children: [
             Flexible(
-              child: Text(
-                'Binary Tree',
-                style: theme.textTheme.titleLarge,
-                overflow: TextOverflow.ellipsis,
-              ),
+              child: Text('Binary Tree',
+                  style: theme.textTheme.titleLarge, overflow: TextOverflow.ellipsis),
             ),
             const SizedBox(width: 4),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
-                color: theme.primaryColor.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(8),
-              ),
+                  color: theme.primaryColor.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8)),
               child: Text(
                 '${(_currentScale.isNaN ? 100 : (_currentScale * 100).toInt())}%',
                 style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.primaryColor,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 10,
-                ),
+                    color: theme.primaryColor, fontWeight: FontWeight.w600, fontSize: 10),
               ),
             ),
           ],
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.zoom_out),
-            onPressed: _zoomOut,
-            tooltip: 'Zoom Out',
-          ),
+              icon: const Icon(Icons.zoom_out),
+              onPressed: _zoomOut,
+              tooltip: 'Zoom Out'),
           IconButton(
-            icon: const Icon(Icons.zoom_in),
-            onPressed: _zoomIn,
-            tooltip: 'Zoom In',
-          ),
+              icon: const Icon(Icons.zoom_in),
+              onPressed: _zoomIn,
+              tooltip: 'Zoom In'),
           IconButton(
               icon: const Icon(Icons.refresh),
               onPressed: _refresh,
@@ -168,14 +299,26 @@ class _BinaryTreeScreenState extends State<BinaryTreeScreen> {
             }
             final tree = snapshot.data;
             if (tree == null) {
-              return _TreeError(
-                  onRetry: _refresh, error: 'Unable to load tree data.');
+              return _TreeError(onRetry: _refresh, error: 'Unable to load tree data.');
             }
-            return RefreshIndicator(
-                onRefresh: _refresh,
-                child: _TreeContent(
-                    tree: tree,
-                    transformationController: _transformationController));
+            return Column(
+              children: [
+                const _TreeInfoBanner(),
+                Expanded(
+                  child: RefreshIndicator(
+                    onRefresh: _refresh,
+                    child: InteractiveViewer(
+                      transformationController: _transformationController,
+                      minScale: 0.1,
+                      maxScale: 3.0,
+                      boundaryMargin: const EdgeInsets.all(200),
+                      constrained: false,
+                      child: _TreeCanvas(tree: tree),
+                    ),
+                  ),
+                ),
+              ],
+            );
           },
         ),
       ),
@@ -184,55 +327,8 @@ class _BinaryTreeScreenState extends State<BinaryTreeScreen> {
 }
 
 // ---------------------------------------------------------------------------
-// Tree content
+// Info banner
 // ---------------------------------------------------------------------------
-
-class _TreeContent extends StatelessWidget {
-  const _TreeContent(
-      {required this.tree, required this.transformationController});
-  final MemberTree tree;
-  final TransformationController transformationController;
-
-  @override
-  Widget build(BuildContext context) {
-    final pathMap = tree.toPathMap();
-    final maxDepth = tree.root.depth + tree.depthLimit;
-
-    print('🌳 TreeContent building...');
-    print('   Root: ${tree.root.fullName} (${tree.root.placementPath})');
-    print('   Total nodes: ${tree.nodes.length}');
-    print('   PathMap keys: ${pathMap.keys.join(', ')}');
-    print(
-        '   Max depth: $maxDepth (root depth: ${tree.root.depth} + limit: ${tree.depthLimit})');
-
-    return Column(
-      children: [
-        const _TreeInfoBanner(),
-        Expanded(
-          child: InteractiveViewer(
-            transformationController: transformationController,
-            minScale: 0.1,
-            maxScale: 3.0,
-            boundaryMargin: const EdgeInsets.all(100),
-            constrained: false,
-            child: Center(
-              child: Padding(
-                padding: const EdgeInsets.all(50),
-                child: _TreeNodeWidget(
-                  node: tree.root,
-                  pathMap: pathMap,
-                  depth: tree.root.depth,
-                  maxDepth: maxDepth,
-                ),
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
 class _TreeInfoBanner extends StatelessWidget {
   const _TreeInfoBanner();
 
@@ -251,10 +347,9 @@ class _TreeInfoBanner extends StatelessWidget {
           Text(
             'Tap a member to view details'.toUpperCase(),
             style: theme.textTheme.labelSmall?.copyWith(
-              color: theme.colorScheme.primary,
-              letterSpacing: 1.2,
-              fontWeight: FontWeight.w700,
-            ),
+                color: theme.colorScheme.primary,
+                letterSpacing: 1.2,
+                fontWeight: FontWeight.w700),
           ),
         ],
       ),
@@ -262,142 +357,160 @@ class _TreeInfoBanner extends StatelessWidget {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Recursive tree node
-// ---------------------------------------------------------------------------
+// ===========================================================================
+// Tree canvas — coordinate-based layout
+// ===========================================================================
 
-class _TreeNodeWidget extends StatelessWidget {
-  const _TreeNodeWidget({
-    required this.node,
-    required this.pathMap,
-    required this.depth,
-    required this.maxDepth,
-  });
-
-  final MemberNode node;
-  final Map<String, MemberNode> pathMap;
-  final int depth;
-  final int maxDepth;
+class _TreeCanvas extends StatelessWidget {
+  const _TreeCanvas({required this.tree});
+  final MemberTree tree;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final childDepth = depth + 1;
-    final canExpand = childDepth <= maxDepth;
-    final leftPath = '${node.placementPath}.L';
-    final rightPath = '${node.placementPath}.R';
-    final leftNode = pathMap[leftPath];
-    final rightNode = pathMap[rightPath];
+    final pathMap = tree.toPathMap();
+    final maxDepth = tree.root.depth + tree.depthLimit;
 
-    print('🌳 Building node: ${node.fullName} (${node.placementPath})');
-    print('   Looking for left: $leftPath -> ${leftNode?.fullName ?? 'null'}');
-    print(
-        '   Looking for right: $rightPath -> ${rightNode?.fullName ?? 'null'}');
-    print('   Total nodes in map: ${pathMap.length}');
+    // ---- compute layout ---------------------------------------------------
+    final layoutRoot = _buildLayoutTree(tree.root, pathMap, maxDepth);
+    _calcWidths(layoutRoot, maxDepth);
+    _assignYs(layoutRoot, 0);
+    layoutRoot.x = 0;
+    _assignXs(layoutRoot, maxDepth);
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        _MemberNodeCard(node: node),
-        if (canExpand) ...[
-          const SizedBox(height: 24),
-          Stack(
-            clipBehavior: Clip.none,
-            children: [
-              // Diagonal connectors
-              Positioned(
-                top: -24,
-                left: 0,
-                right: 0,
-                child: CustomPaint(
-                  size: Size(320, 30),
-                  painter: _DiagonalConnectorsPainter(
-                    color: theme.dividerColor.withValues(alpha: 0.7),
-                    hasLeft: true,
-                    hasRight: true,
-                  ),
-                ),
+    final allNodes = _flatten(layoutRoot);
+    final slots = <_SlotPos>[];
+    _collectSlots(layoutRoot, maxDepth, slots);
+
+    // Include any orphaned nodes (members in pathMap not reached by recursive walk)
+    for (final entry in pathMap.entries) {
+      if (!allNodes.containsKey(entry.key)) {
+        final orphan = _LayoutNode(member: entry.value);
+        orphan.x = 0;
+        orphan.y = orphan.member.depth * (_nodeHeight + _vGap);
+        allNodes[entry.key] = orphan;
+      }
+    }
+
+    // ---- bounding box -----------------------------------------------------
+    double bMin = double.infinity, bMax = double.negativeInfinity;
+    for (final n in allNodes.values) {
+      final l = n.x - _nodeWidth / 2, r = n.x + _nodeWidth / 2;
+      if (l < bMin) bMin = l;
+      if (r > bMax) bMax = r;
+    }
+    for (final s in slots) {
+      final l = s.x - _nodeWidth / 2, r = s.x + _nodeWidth / 2;
+      if (l < bMin) bMin = l;
+      if (r > bMax) bMax = r;
+    }
+    double bMaxY = 0;
+    for (final n in allNodes.values) {
+      final ny = n.y + _nodeHeight;
+      if (ny > bMaxY) bMaxY = ny;
+    }
+    for (final s in slots) {
+      final sy = s.y + _nodeHeight;
+      if (sy > bMaxY) bMaxY = sy;
+    }
+    final totalW = bMax - bMin + _nodeWidth + _padding * 2;
+    final treeH = bMaxY + _padding;
+
+    return SizedBox(
+      width: totalW.clamp(300, double.infinity),
+      height: treeH.clamp(200, double.infinity),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          // connector lines
+          Positioned.fill(
+            child: CustomPaint(
+              painter: _TreeConnectorPainter(
+                nodes: allNodes,
+                slots: slots,
+                offsetX: -bMin + _padding,
+                offsetY: _padding / 2,
+                color: Theme.of(context).dividerColor.withValues(alpha: 0.5),
               ),
-              // Children nodes
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (leftNode != null)
-                      _TreeNodeWidget(
-                          node: leftNode,
-                          pathMap: pathMap,
-                          depth: childDepth,
-                          maxDepth: maxDepth)
-                    else
-                      _EmptySlot(leg: 'Left'),
-                    const SizedBox(width: 40),
-                    if (rightNode != null)
-                      _TreeNodeWidget(
-                          node: rightNode,
-                          pathMap: pathMap,
-                          depth: childDepth,
-                          maxDepth: maxDepth)
-                    else
-                      _EmptySlot(leg: 'Right'),
-                  ],
-                ),
-              ),
-            ],
+            ),
           ),
+          // real nodes
+          for (final ln in allNodes.values)
+            Positioned(
+              left: ln.x - bMin - _nodeWidth / 2 + _padding,
+              top: ln.y + _padding / 2,
+              child: _MemberNodeCard(node: ln.member),
+            ),
+          // empty slots
+          for (final s in slots)
+            Positioned(
+              left: s.x - bMin - _nodeWidth / 2 + _padding,
+              top: s.y + _padding / 2,
+              child: _EmptySlot(isLeft: s.isLeft, sponsorId: pathMap[s.parentPath]?.memberId ?? ''),
+            ),
         ],
-      ],
+      ),
     );
   }
 }
 
-class _DiagonalConnectorsPainter extends CustomPainter {
-  const _DiagonalConnectorsPainter({
+// ===========================================================================
+// Connector-line painter
+// ===========================================================================
+
+class _TreeConnectorPainter extends CustomPainter {
+  _TreeConnectorPainter({
+    required this.nodes,
+    required this.slots,
+    required this.offsetX,
+    required this.offsetY,
     required this.color,
-    required this.hasLeft,
-    required this.hasRight,
   });
+
+  final Map<String, _LayoutNode> nodes;
+  final List<_SlotPos> slots;
+  final double offsetX, offsetY;
   final Color color;
-  final bool hasLeft;
-  final bool hasRight;
 
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
       ..color = color
-      ..strokeWidth = 2
-      ..style = PaintingStyle.stroke;
+      ..strokeWidth = 0.5
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
 
-    final centerX = size.width / 2;
-    final startY = 0.0;
-    final endY = size.height;
-
-    // Draw diagonal line to left child
-    if (hasLeft) {
-      final path = Path();
-      path.moveTo(centerX, startY);
-      path.lineTo(centerX - 60, endY);
-      canvas.drawPath(path, paint);
+    void drawLine(double x1, double y1, double x2, double y2) {
+      canvas.drawLine(Offset(x1 + offsetX, y1 + offsetY), Offset(x2 + offsetX, y2 + offsetY), paint);
     }
 
-    // Draw diagonal line to right child
-    if (hasRight) {
-      final path = Path();
-      path.moveTo(centerX, startY);
-      path.lineTo(centerX + 60, endY);
-      canvas.drawPath(path, paint);
+    void drawConnector(double px, double pBot, double cx, double cTop) {
+      final midY = pBot + (cTop - pBot) / 2;
+      drawLine(px, pBot, px, midY);
+      drawLine(px, midY, cx, midY);
+      drawLine(cx, midY, cx, cTop);
+    }
+
+    for (final ln in nodes.values) {
+      final pBot = ln.y + _nodeHeight;
+      if (ln.left != null) drawConnector(ln.x, pBot, ln.left!.x, ln.left!.y);
+      if (ln.right != null) drawConnector(ln.x, pBot, ln.right!.x, ln.right!.y);
+    }
+
+    for (final s in slots) {
+      final parent = nodes[s.parentPath];
+      if (parent == null) continue;
+      drawConnector(parent.x, parent.y + _nodeHeight, s.x, s.y);
     }
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(covariant _TreeConnectorPainter old) =>
+      old.nodes != nodes || old.slots != slots || old.color != color;
 }
 
-// ---------------------------------------------------------------------------
-// Member card (rendered from API data)
-// ---------------------------------------------------------------------------
+// ===========================================================================
+// Fixed-size member card  (144 × 106)
+// ===========================================================================
 
 class _MemberNodeCard extends StatelessWidget {
   const _MemberNodeCard({required this.node});
@@ -407,108 +520,150 @@ class _MemberNodeCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final isActive = node.status?.toLowerCase() == 'active';
-    final borderColor = isActive
-        ? const Color(0xFF10B981).withValues(alpha: 0.7)
-        : const Color(0xFFE11D48).withValues(alpha: 0.7);
+    final status = node.status.toLowerCase();
 
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(24),
-        onTap: () => _openMemberDetail(context, node),
-        child: Container(
-          width: 120,
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: isDark
-                  ? [
-                      const Color(0xFF1E293B),
-                      const Color(0xFF0F172A),
-                      const Color(0xFF020617)
-                    ]
-                  : [
-                      Colors.white,
-                      const Color(0xFFF8FAFC),
-                      const Color(0xFFF1F5F9)
-                    ],
+    final statusUpper = status.toUpperCase();
+
+    Color bgColor;
+    Color borderColor;
+    String statusLabel;
+    if (statusUpper == 'ACTIVE' || statusUpper == 'APPROVED') {
+      bgColor = const Color(0xFF16A34A);
+      borderColor = const Color(0xFF15803D);
+      statusLabel = 'Active';
+    } else if (statusUpper == 'PENDING') {
+      bgColor = const Color(0xFFCA8A04);
+      borderColor = const Color(0xFFA16207);
+      statusLabel = 'Pending';
+    } else {
+      bgColor = isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9);
+      borderColor = isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1);
+      statusLabel = status;
+    }
+
+    return SizedBox(
+      width: _nodeWidth,
+      height: _nodeHeight,
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(8),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: () => _openMemberDetail(context, node),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 2),
+            decoration: BoxDecoration(
+              color: bgColor,
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: borderColor, width: 0.5),
             ),
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: borderColor, width: 1),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.1),
-                blurRadius: 16,
-                offset: const Offset(0, 8),
-              ),
-            ],
-          ),
-          child: Column(
-            children: [
-              ClipOval(
-                child: node.profileImage?.isNotEmpty == true
-                    ? SafeNetworkImage(
-                        src: node.profileImage!,
-                        width: 32,
-                        height: 32,
-                        fit: BoxFit.cover,
-                      )
-                    : Container(
-                        width: 32,
-                        height: 32,
-                        decoration: const BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [Color(0xFF6366F1), Color(0xFFA855F7)],
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ClipOval(
+                  child: node.profileImage?.isNotEmpty == true
+                      ? SafeNetworkImage(
+                          src: node.profileImage!,
+                          width: 14,
+                          height: 14,
+                          fit: BoxFit.cover,
+                        )
+                      : Container(
+                          width: 14,
+                          height: 14,
+                          decoration: const BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [Color(0xFF6366F1), Color(0xFFA855F7)],
+                            ),
                           ),
-                        ),
-                        child: Center(
-                          child: Text(
-                            _getInitials(node.fullName),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w600,
-                              fontSize: 10,
+                          child: Center(
+                            child: Text(
+                              _initials(node.fullName),
+                              style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 6),
                             ),
                           ),
                         ),
+                ),
+                const SizedBox(height: 1),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.25),
+                        borderRadius: BorderRadius.circular(2),
                       ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                node.memberId ?? '',
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
-                  fontSize: 10,
-                  fontWeight: FontWeight.w500,
+                      child: Text(
+                        statusLabel,
+                        style: TextStyle(
+                          fontSize: 5,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                          height: 1,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 2),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: node.type == 'LEADER'
+                            ? const Color(0xFFD97706)
+                            : const Color(0xFF9333EA),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                      child: Text(
+                        node.type == 'LEADER' ? 'Leader' : 'User',
+                        style: const TextStyle(
+                          fontSize: 5,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                          height: 1,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                textAlign: TextAlign.center,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 2),
-              Text(
-                node.fullName.isEmpty ? 'Unnamed' : node.fullName,
-                style: theme.textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 12,
+                const SizedBox(height: 1),
+                Text(
+                  node.memberId ?? '',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.8),
+                    fontSize: 5,
+                    fontWeight: FontWeight.w500,
+                    height: 1.1,
+                  ),
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                textAlign: TextAlign.center,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
+                Text(
+                  node.fullName.isEmpty ? 'Unnamed' : node.fullName,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 6,
+                    height: 1.1,
+                  ),
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  String _getInitials(String name) {
+  String _initials(String name) {
     final parts = name.split(' ').where((p) => p.isNotEmpty).toList();
     if (parts.isEmpty) return '?';
     if (parts.length == 1) return parts[0].substring(0, 2).toUpperCase();
@@ -516,145 +671,67 @@ class _MemberNodeCard extends StatelessWidget {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Empty slot (register new member)
-// ---------------------------------------------------------------------------
+// ===========================================================================
+// Empty slot — exactly the same dimensions as a real node
+// ===========================================================================
 
 class _EmptySlot extends StatelessWidget {
-  const _EmptySlot({required this.leg});
-  final String leg;
+  const _EmptySlot({required this.isLeft, required this.sponsorId});
+  final bool isLeft;
+  final String sponsorId;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final color = theme.colorScheme.primary;
-    return InkWell(
-      borderRadius: BorderRadius.circular(16),
-      onTap: () =>
-          Navigator.of(context).pushNamed(RegisterMemberScreen.routeName),
-      child: Container(
-        width: 70,
-        height: 40,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: color.withValues(alpha: 0.4), width: 1.5),
-          color: color.withValues(alpha: 0.05),
+
+    return SizedBox(
+      width: _nodeWidth,
+      height: _nodeHeight,
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(6),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(6),
+          onTap: () => Navigator.of(context).pushNamed(
+            RegisterMemberScreen.routeName,
+            arguments: {
+              'sponsorId': sponsorId,
+              'leg': isLeft ? 'LEFT' : 'RIGHT',
+            },
+          ),
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: color.withValues(alpha: 0.35), width: 0.5),
+              color: color.withValues(alpha: 0.04),
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.person_add_alt_1, color: color.withValues(alpha: 0.6), size: 12),
+                const SizedBox(height: 1),
+                Text(
+                  isLeft ? 'L' : 'R',
+                  style: TextStyle(
+                    color: color.withValues(alpha: 0.6),
+                    fontWeight: FontWeight.w600,
+                    fontSize: 6,
+                    height: 1,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
-        alignment: Alignment.center,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.person_add_alt_1, color: color, size: 16),
-            const SizedBox(height: 2),
-            Text('Open $leg',
-                style: theme.textTheme.labelSmall?.copyWith(
-                    color: color, fontWeight: FontWeight.w700, fontSize: 6)),
-          ],
-        ),
       ),
     );
   }
 }
 
-// ---------------------------------------------------------------------------
-// Stats panel at the bottom
-// ---------------------------------------------------------------------------
-
-class _TreeStatsPanel extends StatelessWidget {
-  const _TreeStatsPanel({required this.tree});
-  final MemberTree tree;
-
-  @override
-  Widget build(BuildContext context) {
-    final leftCount =
-        tree.nodes.where((n) => n.leg?.toUpperCase() == 'LEFT').length;
-    final rightCount =
-        tree.nodes.where((n) => n.leg?.toUpperCase() == 'RIGHT').length;
-    final totalBv = tree.nodes.fold<double>(0, (s, n) => s + n.bvTotal);
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        border: Border(
-            top: BorderSide(
-                color: Theme.of(context).dividerColor.withValues(alpha: 0.4))),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-              flex: 1,
-              child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: _SummaryTile(
-                      label: 'Total',
-                      value: tree.nodes.length.toString(),
-                      color: Colors.indigo))),
-          Expanded(
-              flex: 1,
-              child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: _SummaryTile(
-                      label: 'Left',
-                      value: leftCount.toString(),
-                      color: const Color(0xFF2B9DEE)))),
-          Expanded(
-              flex: 1,
-              child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: _SummaryTile(
-                      label: 'Right',
-                      value: rightCount.toString(),
-                      color: const Color(0xFF10B981)))),
-          Expanded(
-              flex: 1,
-              child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: _SummaryTile(
-                      label: 'BV',
-                      value: totalBv.toStringAsFixed(0),
-                      color: Colors.orange))),
-        ],
-      ),
-    );
-  }
-}
-
-class _SummaryTile extends StatelessWidget {
-  const _SummaryTile(
-      {required this.label, required this.value, required this.color});
-  final String label;
-  final String value;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          color: color.withValues(alpha: 0.08)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label.toUpperCase(),
-              style: theme.textTheme.labelSmall?.copyWith(
-                  color: color, letterSpacing: 1, fontWeight: FontWeight.w700)),
-          const SizedBox(height: 4),
-          Text(value,
-              style: theme.textTheme.titleMedium
-                  ?.copyWith(fontWeight: FontWeight.w700)),
-        ],
-      ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
+// ===========================================================================
 // Error state
-// ---------------------------------------------------------------------------
+// ===========================================================================
 
 class _TreeError extends StatelessWidget {
   const _TreeError({required this.onRetry, this.error});
@@ -694,9 +771,9 @@ class _TreeError extends StatelessWidget {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Detail navigation helper
-// ---------------------------------------------------------------------------
+// ===========================================================================
+// Navigation helper
+// ===========================================================================
 
 void _openMemberDetail(BuildContext context, MemberNode node) {
   final joined = node.createdAt;
@@ -710,8 +787,8 @@ void _openMemberDetail(BuildContext context, MemberNode node) {
     arguments: MemberDetailArguments(
       memberId: node.memberId,
       name: node.fullName,
-      role: node.role.isEmpty ? 'Partner' : node.role,
-      rankLabel: node.role.isEmpty ? 'MEMBER' : node.role.toUpperCase(),
+      role: node.type == 'LEADER' ? 'Leader' : 'User',
+      rankLabel: node.type == 'LEADER' ? 'LEADER' : 'USER',
       rankColor: node.leg?.toUpperCase() == 'RIGHT'
           ? const Color(0xFF10B981)
           : const Color(0xFF2B9DEE),
@@ -719,8 +796,10 @@ void _openMemberDetail(BuildContext context, MemberNode node) {
       status: node.status,
       totalBv: node.bvTotal.round(),
       teamSize: node.teamSize,
+      activeTeam: node.activeTeam,
+      inactiveTeam: node.inactiveTeam,
       weakLeg: weakLeg,
-      location: 'Not specified',
+      location: node.address?.isNotEmpty == true ? node.address! : 'Not specified',
       contactEmail: node.email ?? 'n/a',
       contactPhone: node.phone ?? 'n/a',
       joinedAgo: joinedAgo,

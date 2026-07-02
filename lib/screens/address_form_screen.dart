@@ -6,7 +6,6 @@ import '../services/address_storage_service.dart';
 import '../services/api_client.dart';
 import '../services/pin_code_service.dart';
 import '../services/pincode_api_service.dart';
-import '../theme/app_theme.dart';
 import '../state/profile_state.dart';
 
 class AddressFormRouteArgs {
@@ -212,8 +211,7 @@ class _AddressFormScreenState extends State<AddressFormScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final bg =
-        isDark ? AppColors.backgroundDark : AppColors.backgroundLight;
+    final bg = isDark ? const Color(0xFF070F1B) : Colors.white;
 
     final rawArgs = ModalRoute.of(context)?.settings.arguments;
     if (rawArgs is! AddressFormRouteArgs) {
@@ -231,178 +229,270 @@ class _AddressFormScreenState extends State<AddressFormScreen> {
       );
     }
 
-    // Debug current form values
-    print('=== FORM VALUES DEBUG ===');
-    print('Current City: "${_city.text}"');
-    print('Current State: "${_state.text}"');
-    print('Current PIN: "${_pin.text}"');
-    print('Form mounted: $mounted');
-    print('========================');
-
     final isEdit = args.existing != null;
+
+    final inputFontSize = (theme.textTheme.bodyLarge?.fontSize ?? 15) - 3;
+
+    OutlineInputBorder outline(Color color, [double width = 1]) {
+      return OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: BorderSide(color: color, width: width),
+      );
+    }
+
+    InputDecoration decoration(String placeholder, {int? maxLines}) {
+      final muted = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+      final idleColor = isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1);
+      return InputDecoration(
+        isDense: true,
+        hintText: placeholder,
+        hintStyle: TextStyle(
+          fontSize: inputFontSize,
+          fontWeight: FontWeight.w400,
+          color: muted.withValues(alpha: 0.88),
+        ),
+        filled: true,
+        fillColor: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
+        border: outline(idleColor),
+        enabledBorder: outline(idleColor),
+        focusedBorder: outline(theme.colorScheme.primary, 1.35),
+        errorBorder: outline(Colors.red.shade400),
+        focusedErrorBorder: outline(Colors.red.shade300, 1.15),
+        errorStyle: TextStyle(
+          fontSize: (inputFontSize - 1).clamp(10.0, 14.0),
+          height: 1.2,
+          color: Colors.red.shade700,
+        ),
+        contentPadding: EdgeInsets.symmetric(
+          horizontal: 14,
+          vertical: (maxLines != null && maxLines > 1) ? 12 : 10,
+        ),
+      );
+    }
+
+    Widget fieldShell({required Widget child}) {
+      if (isDark) {
+        return DecoratedBox(
+          decoration: BoxDecoration(
+            color: const Color(0xFF0F1724),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: child,
+        );
+      }
+      return DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(8),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF0F172A).withValues(alpha: 0.07),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: child,
+        ),
+      );
+    }
+
+    Widget labeledField({
+      required TextEditingController controller,
+      required String placeholder,
+      String? Function(String?)? validator,
+      TextInputType? keyboardType,
+      List<TextInputFormatter>? inputFormatters,
+      TextCapitalization textCapitalization = TextCapitalization.none,
+      int? maxLines,
+      bool required = true,
+      void Function(String)? onChanged,
+    }) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(left: 4, bottom: 6),
+            child: RichText(
+              text: TextSpan(
+                text: placeholder,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.75),
+                ),
+                children: [
+                  if (required)
+                    const TextSpan(
+                      text: ' *',
+                      style: TextStyle(
+                        color: Colors.red,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 17,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          fieldShell(
+            child: TextFormField(
+              controller: controller,
+              keyboardType: keyboardType,
+              inputFormatters: inputFormatters,
+              textCapitalization: textCapitalization,
+              maxLines: maxLines ?? 1,
+              onChanged: onChanged,
+              style: TextStyle(
+                fontSize: inputFontSize,
+                fontWeight: FontWeight.w500,
+                height: 1.25,
+                color: theme.colorScheme.onSurface,
+              ),
+              cursorColor: theme.colorScheme.primary,
+              decoration: decoration(placeholder, maxLines: maxLines),
+              validator: validator,
+            ),
+          ),
+        ],
+      );
+    }
 
     return Scaffold(
       backgroundColor: bg,
       appBar: AppBar(
         title: Text(isEdit ? 'Edit address' : 'New address'),
         centerTitle: true,
+        backgroundColor: bg,
+        elevation: 0,
       ),
       body: SafeArea(
         child: Form(
           key: _formKey,
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
-            children: [
-              if (args.showSaveCheckbox) ...[
-                CheckboxListTile(
-                  value: _saveToPrefs,
-                  onChanged: (v) => setState(() => _saveToPrefs = v ?? true),
-                  title: const Text('Save this address'),
-                  subtitle: const Text(
-                    'If unchecked, this form will close without storing.',
-                  ),
-                  contentPadding: EdgeInsets.zero,
-                ),
-                const SizedBox(height: 8),
-              ],
-              if (args.userId != null) ...[
-                SwitchListTile(
-                  value: _isDefault,
-                  onChanged: (v) => setState(() => _isDefault = v),
-                  title: const Text('Default address'),
-                  subtitle: const Text('Used as the primary delivery address.'),
-                  contentPadding: EdgeInsets.zero,
-                ),
-                const SizedBox(height: 8),
-              ],
-              _LabeledField(
-                controller: _name,
-                label: 'Full name',
-                validator: (v) =>
-                    v == null || v.trim().isEmpty ? 'Required' : null,
-              ),
-              _LabeledField(
-                controller: _phone,
-                label: 'Phone',
-                keyboardType: TextInputType.phone,
-                inputFormatters: [
-                  FilteringTextInputFormatter.digitsOnly,
-                  LengthLimitingTextInputFormatter(10),
-                ],
-                validator: (v) {
-                  if (v == null || v.trim().isEmpty) return 'Required';
-                  final phoneRegex = RegExp(r'^[6-9]\d{9}$');
-                  if (!phoneRegex.hasMatch(v.trim())) return 'Enter valid 10-digit mobile number';
-                  return null;
-                },
-              ),
-              _LabeledField(
-                controller: _email,
-                label: 'Email',
-                keyboardType: TextInputType.emailAddress,
-                validator: (v) {
-                  if (v == null || v.trim().isEmpty) return 'Required';
-                  final emailRegex = RegExp(r'^[\w\.-]+@[\w\.-]+\.\w{2,}$');
-                  if (!emailRegex.hasMatch(v.trim())) return 'Enter a valid email address';
-                  return null;
-                },
-              ),
-              _LabeledField(
-                controller: _line,
-                label: 'Address line',
-                maxLines: 2,
-                validator: (v) =>
-                    v == null || v.trim().isEmpty ? 'Required' : null,
-              ),
-              _LabeledField(
-                controller: _pin,
-                label: 'PIN / Postal code',
-                keyboardType: TextInputType.text,
-                onChanged: _onPinCodeChanged,
-                validator: (v) =>
-                    v == null || v.trim().isEmpty ? 'Required' : null,
-              ),
-              Row(
-                children: [
-                  Expanded(
-                    child: _LabeledField(
-                      controller: _city,
-                      label: 'City',
-                      validator: (v) =>
-                          v == null || v.trim().isEmpty ? 'Required' : null,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 14, 20, 28),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (args.showSaveCheckbox) ...[
+                  CheckboxListTile(
+                    value: _saveToPrefs,
+                    onChanged: (v) => setState(() => _saveToPrefs = v ?? true),
+                    title: const Text('Save this address'),
+                    subtitle: const Text(
+                      'If unchecked, this form will close without storing.',
                     ),
+                    contentPadding: EdgeInsets.zero,
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _LabeledField(
-                      controller: _state,
-                      label: 'State',
-                      validator: (v) =>
-                          v == null || v.trim().isEmpty ? 'Required' : null,
-                    ),
-                  ),
+                  const SizedBox(height: 8),
                 ],
-              ),
-              const SizedBox(height: 24),
-              FilledButton(
-                onPressed: _submitting ? null : _submit,
-                style: FilledButton.styleFrom(
-                  minimumSize: const Size(double.infinity, 48),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
+                if (args.userId != null) ...[
+                  SwitchListTile(
+                    value: _isDefault,
+                    onChanged: (v) => setState(() => _isDefault = v),
+                    title: const Text('Default address'),
+                    subtitle: const Text('Used as the primary delivery address.'),
+                    contentPadding: EdgeInsets.zero,
                   ),
+                  const SizedBox(height: 8),
+                ],
+                labeledField(
+                  controller: _name,
+                  placeholder: 'Full name',
+                  textCapitalization: TextCapitalization.words,
+                  validator: (v) =>
+                      v == null || v.trim().isEmpty ? 'Required' : null,
                 ),
-                child: _submitting
-                    ? const SizedBox(
-                        width: 22,
-                        height: 22,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : Text(isEdit ? 'Save changes' : 'Save address'),
-              ),
-            ],
+                const SizedBox(height: 12),
+                labeledField(
+                  controller: _phone,
+                  placeholder: 'Phone',
+                  keyboardType: TextInputType.phone,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(10),
+                  ],
+                  validator: (v) {
+                    if (v == null || v.trim().isEmpty) return 'Required';
+                    if (!RegExp(r'^[6-9]\d{9}$').hasMatch(v.trim())) return 'Enter valid 10-digit mobile number';
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 12),
+                labeledField(
+                  controller: _email,
+                  placeholder: 'Email (order updates)',
+                  keyboardType: TextInputType.emailAddress,
+                  textCapitalization: TextCapitalization.none,
+                  validator: (v) {
+                    if (v == null || v.trim().isEmpty) return 'Required';
+                    if (!RegExp(r'^[\w\.-]+@[\w\.-]+\.\w{2,}$').hasMatch(v.trim())) return 'Enter a valid email address';
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 12),
+                labeledField(
+                  controller: _line,
+                  placeholder: 'Address line',
+                  maxLines: 2,
+                  validator: (v) =>
+                      v == null || v.trim().isEmpty ? 'Required' : null,
+                ),
+                const SizedBox(height: 12),
+                labeledField(
+                  controller: _pin,
+                  placeholder: 'Pin Code',
+                  keyboardType: TextInputType.text,
+                  onChanged: _onPinCodeChanged,
+                  validator: (v) =>
+                      v == null || v.trim().isEmpty ? 'Required' : null,
+                ),
+                const SizedBox(height: 12),
+                labeledField(
+                  controller: _city,
+                  placeholder: 'City',
+                  validator: (v) =>
+                      v == null || v.trim().isEmpty ? 'Required' : null,
+                ),
+                const SizedBox(height: 12),
+                labeledField(
+                  controller: _state,
+                  placeholder: 'State',
+                  validator: (v) =>
+                      v == null || v.trim().isEmpty ? 'Required' : null,
+                ),
+                const SizedBox(height: 24),
+                FilledButton(
+                  onPressed: _submitting ? null : _submit,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFF2B9DEE),
+                    minimumSize: const Size(double.infinity, 52),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    elevation: 6,
+                    shadowColor: const Color(0xFF2B9DEE).withValues(alpha: 0.3),
+                  ),
+                  child: _submitting
+                      ? const SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Text(
+                          'Save address',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
+                        ),
+                ),
+              ],
+            ),
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _LabeledField extends StatelessWidget {
-  const _LabeledField({
-    required this.controller,
-    required this.label,
-    this.validator,
-    this.keyboardType,
-    this.inputFormatters,
-    this.maxLines = 1,
-    this.onChanged,
-  });
-
-  final TextEditingController controller;
-  final String label;
-  final String? Function(String?)? validator;
-  final TextInputType? keyboardType;
-  final List<TextInputFormatter>? inputFormatters;
-  final int maxLines;
-  final void Function(String)? onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: TextFormField(
-        controller: controller,
-        validator: validator,
-        keyboardType: keyboardType,
-        inputFormatters: inputFormatters,
-        maxLines: maxLines,
-        onChanged: onChanged,
-        decoration: InputDecoration(
-          labelText: label,
-          alignLabelWithHint: maxLines > 1,
-          labelStyle: const TextStyle(fontSize: 14),
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
         ),
       ),
     );

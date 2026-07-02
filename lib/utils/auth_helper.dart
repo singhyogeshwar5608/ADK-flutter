@@ -6,7 +6,7 @@ class AuthHelper {
     final prefs = await SharedPreferences.getInstance();
     final token1 = prefs.getString('auth_token') ?? '';
     final token2 = prefs.getString('access_token') ?? '';
-    final token3 = prefs.getString('netshop_access_token') ?? '';
+    final token3 = prefs.getString('adk_access_token') ?? '';
     final token4 = prefs.getString('token') ?? '';
     
     final token = token1.isNotEmpty ? token1 : 
@@ -16,7 +16,7 @@ class AuthHelper {
     print('Flutter Auth Debug:');
     print('- auth_token: $token1');
     print('- access_token: $token2');
-    print('- netshop_access_token: $token3');
+    print('- adk_access_token: $token3');
     print('- token: $token4');
     print('- Using token: $token');
 

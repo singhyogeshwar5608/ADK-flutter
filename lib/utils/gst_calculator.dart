@@ -9,8 +9,8 @@ class GstCalculator {
     double totalValue = 0.0;
     
     for (final item in selectedItems) {
-      totalGst += item.totalGst;
-      totalValue += item.totalPrice;
+      totalGst += item.totalGst();
+      totalValue += item.totalPrice();
     }
     
     // Calculate average GST percentage

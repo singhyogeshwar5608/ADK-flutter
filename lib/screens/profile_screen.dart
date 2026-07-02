@@ -59,7 +59,16 @@ class ProfileScreen extends StatelessWidget {
         if (!profileState.isAuthenticated) {
           return Scaffold(
             backgroundColor: background,
-            appBar: AppBar(title: const Text('Profile')),
+            appBar: AppBar(
+              title: const Text('Profile'),
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.refresh_rounded),
+                  onPressed: () => profileState.refresh(),
+                  tooltip: 'Refresh',
+                ),
+              ],
+            ),
             body: Center(
               child: Padding(
                 padding: const EdgeInsets.all(28),
@@ -105,6 +114,16 @@ class ProfileScreen extends StatelessWidget {
 
         return Scaffold(
           backgroundColor: background,
+          appBar: AppBar(
+            title: const Text('Profile'),
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.refresh_rounded),
+                onPressed: () => profileState.refresh(),
+                tooltip: 'Refresh',
+              ),
+            ],
+          ),
           body: SafeArea(
             child: RefreshIndicator(
               onRefresh: () => profileState.refresh(),
@@ -639,6 +658,25 @@ class _BvStatusBlock extends StatelessWidget {
                         color: teal.withValues(alpha: 0.85),
                       ),
                     ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Personal BV',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                    ),
+                  ),
+                  Text(
+                    profile.totalBv?.toInt().toString() ?? '0',
+                    style: theme.textTheme.labelLarge?.copyWith(
+                      color: teal,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ],
               ),
@@ -1277,8 +1315,6 @@ class _ProfileQuickActionsSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final profile = ProfileProvider.of(context).data;
-    final partnerId = profile.partnerId;
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1304,14 +1340,14 @@ class _ProfileQuickActionsSection extends StatelessWidget {
             ),
             const SizedBox(width: 8),
             Expanded(
-              child: _QuickActionCard(
+              child:                   _QuickActionCard(
                 icon: Icons.account_tree_rounded,
                 iconColor: const Color(0xFF6366F1),
                 iconBackground: const Color(0xFFE0E7FF),
                 label: 'Binary Tree',
                 onTap: () => Navigator.of(context).pushNamed(
                   BinaryTreeScreen.routeName,
-                  arguments: partnerId,
+                  arguments: profile.partnerId,
                 ),
               ),
             ),
@@ -1504,6 +1540,7 @@ class _ReferralLinkCardState extends State<_ReferralLinkCard> {
     final link = _linkForDisplay(partnerId);
     const linkBoxBg = Color(0xFFE0F2FE);
     const waGreen = Color(0xFF25D366);
+    final isPending = profile.status != 'ACTIVE';
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -1550,7 +1587,7 @@ class _ReferralLinkCardState extends State<_ReferralLinkCard> {
                   selected: _leg == 'LEFT',
                   selectedBackground: _referralLegSelectedBg,
                   selectedBorder: _referralLegSelectedBorder,
-                  onTap: () => setState(() => _leg = 'LEFT'),
+                  onTap: isPending ? () {} : () => setState(() => _leg = 'LEFT'),
                   labelFontSize: (theme.textTheme.titleSmall?.fontSize ?? 14) - 3,
                 ),
               ),
@@ -1562,7 +1599,7 @@ class _ReferralLinkCardState extends State<_ReferralLinkCard> {
                   selected: _leg == 'RIGHT',
                   selectedBackground: _referralLegSelectedBg,
                   selectedBorder: _referralLegSelectedBorder,
-                  onTap: () => setState(() => _leg = 'RIGHT'),
+                  onTap: isPending ? () {} : () => setState(() => _leg = 'RIGHT'),
                   labelFontSize: (theme.textTheme.titleSmall?.fontSize ?? 14) - 3,
                 ),
               ),
@@ -1575,22 +1612,37 @@ class _ReferralLinkCardState extends State<_ReferralLinkCard> {
               color: linkBoxBg,
               borderRadius: BorderRadius.circular(14),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                SelectableText(
-                  link.isEmpty
-                      ? 'Set REFERRAL_SIGNUP_BASE_URL in assets/dotenv (or use --dart-define) and ensure you are signed in, then reopen this screen.'
-                      : link,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: link.isEmpty
-                        ? theme.colorScheme.onSurface.withValues(alpha: 0.55)
-                        : const Color(0xFF1E3A5F),
-                    height: 1.35,
-                  ),
-                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    isPending
+                        ? const SizedBox.shrink()
+                        : SelectableText(
+                              link.isEmpty
+                                  ? 'Set REFERRAL_SIGNUP_BASE_URL in assets/dotenv (or use --dart-define) and ensure you are signed in, then reopen this screen.'
+                                  : link,
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: link.isEmpty
+                                    ? theme.colorScheme.onSurface.withValues(alpha: 0.55)
+                                    : const Color(0xFF1E3A5F),
+                                height: 1.35,
+                              ),
+                            ),
+                    if (isPending)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Text(
+                          'Account not approved — referral link is disabled until admin activates your account.',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.error,
+                            fontSize: 11,
+                            height: 1.3,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
                 const SizedBox(height: 12),
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
@@ -1600,10 +1652,10 @@ class _ReferralLinkCardState extends State<_ReferralLinkCard> {
                         height: _kReferralShareActionBarHeight,
                         child: OutlinedButton.icon(
                           onPressed:
-                              link.isEmpty ? null : () => _copyLink(link),
+                              link.isEmpty || isPending ? null : () => _copyLink(link),
                           style: OutlinedButton.styleFrom(
                             foregroundColor: Colors.black87,
-                            backgroundColor: theme.colorScheme.surface,
+                            backgroundColor: const Color(0xFFE0F2FE),
                             side: BorderSide(
                               color: Colors.black.withValues(alpha: 0.35),
                               width: 1.2,
@@ -1644,7 +1696,7 @@ class _ReferralLinkCardState extends State<_ReferralLinkCard> {
                         child: Tooltip(
                           message: 'Share on WhatsApp',
                           child: FilledButton.icon(
-                            onPressed: link.isEmpty
+                            onPressed: link.isEmpty || isPending
                                 ? null
                                 : () => _shareWhatsApp(link),
                             style: FilledButton.styleFrom(
@@ -1910,8 +1962,6 @@ class _ProfileHeader extends StatelessWidget {
         hasPhoto ? _buildImageProvider(profile.photoUrl) : null;
 
     final avatarRadius = isCompact ? 50.0 : 54.0;
-    final pillPadding = EdgeInsets.symmetric(
-        horizontal: isCompact ? 12 : 16, vertical: isCompact ? 6 : 8);
 
     return SizedBox(
       height: height,
@@ -1937,7 +1987,14 @@ class _ProfileHeader extends StatelessWidget {
                     children: [
                       _HeaderIconButton(
                         icon: Icons.arrow_back,
-                        onPressed: () => Navigator.of(context).maybePop(),
+                        onPressed: () {
+                          final nav = Navigator.of(context);
+                          if (nav.canPop()) {
+                            nav.pop();
+                          } else {
+                            nav.pushReplacementNamed('/');
+                          }
+                        },
                         foregroundColor: Colors.white,
                       ),
                       const Spacer(),
@@ -1972,7 +2029,13 @@ class _ProfileHeader extends StatelessWidget {
                                   fontSize: isCompact ? 20 : 22,
                                 ),
                               ),
-                              const SizedBox(height: 2),
+                              Text(
+                                'Member ID No. · ${profile.dbId}',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: Colors.white.withValues(alpha: 0.8),
+                                  fontSize: isCompact ? 10 : 11,
+                                ),
+                              ),
                               Text(
                                 'Partner ID · ${profile.partnerId}',
                                 style: theme.textTheme.bodySmall?.copyWith(
@@ -1980,7 +2043,7 @@ class _ProfileHeader extends StatelessWidget {
                                   fontSize: isCompact ? 10 : 11,
                                 ),
                               ),
-                              const SizedBox(height: 4),
+                              const SizedBox(height: 1),
                               if (profile.email.isNotEmpty) ...[
                                 _buildContactInfo(
                                   context,
@@ -1988,7 +2051,6 @@ class _ProfileHeader extends StatelessWidget {
                                   profile.email,
                                   isCompact,
                                 ),
-                                const SizedBox(height: 2),
                               ],
                               if (profile.phone.isNotEmpty) ...[
                                 _buildContactInfo(
@@ -1997,7 +2059,6 @@ class _ProfileHeader extends StatelessWidget {
                                   profile.phone,
                                   isCompact,
                                 ),
-                                const SizedBox(height: 2),
                               ],
                               if (_getFullAddress(profile).isNotEmpty) ...[
                                 _buildContactInfo(
@@ -2006,10 +2067,16 @@ class _ProfileHeader extends StatelessWidget {
                                   _getFullAddress(profile),
                                   isCompact,
                                 ),
-                                const SizedBox(height: 4),
                               ],
+                              if (profile.email.isNotEmpty ||
+                                  profile.phone.isNotEmpty ||
+                                  _getFullAddress(profile).isNotEmpty)
+                                const SizedBox(height: 1),
                               Container(
-                                padding: pillPadding,
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: isCompact ? 10 : 12,
+                                  vertical: isCompact ? 4 : 6,
+                                ),
                                 decoration: BoxDecoration(
                                   color: const Color(0xFF0D9488),
                                   borderRadius: BorderRadius.circular(28),

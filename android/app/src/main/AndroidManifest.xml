@@ -57,8 +57,12 @@
                 <data android:scheme="https" android:host="master.d1yeg5lmbstgw1.amplifyapp.com" />
                 <data android:scheme="http" android:host="master.d1yeg5lmbstgw1.amplifyapp.com" />
                 
-                <!-- Match any path under /members -->
+                <!-- Match paths under /members, /signup, /wishlist, /w, /product -->
                 <data android:pathPrefix="/members" />
+                <data android:pathPrefix="/signup" />
+                <data android:pathPrefix="/wishlist" />
+                <data android:pathPrefix="/w" />
+                <data android:pathPrefix="/product" />
             </intent-filter>
 
             <!-- ===================================================== -->
@@ -76,6 +80,7 @@
                 <data android:pathPrefix="/signup" />
                 <data android:pathPrefix="/wishlist" />
                 <data android:pathPrefix="/w" />
+                <data android:pathPrefix="/product" />
             </intent-filter>
 
         </activity>

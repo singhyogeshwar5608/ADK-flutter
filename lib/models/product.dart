@@ -24,6 +24,7 @@ class Product {
     this.weightUnit = 'g',
     this.isComingSoon = false,
     this.isMlm = false,
+    this.discountPercentage = 0,
   }) : assert(price <= totalPrice, 'Actual price cannot exceed total price');
 
   final String id;
@@ -51,6 +52,8 @@ class Product {
   final bool isComingSoon;
   /// Whether the product is restricted to MLM members (from API `is_mlm`).
   final bool isMlm;
+  /// Discount percentage from backend (e.g. 10.0 for 10% off).
+  final double discountPercentage;
 
   factory Product.fromJson(Map<String, dynamic> json) {
     // Helper to find the first non-zero price value from a list of possible keys
@@ -200,6 +203,7 @@ class Product {
       weightUnit: _parseWeightUnit(json['weightUnit'] ?? json['weight_unit']),
       isComingSoon: _parseBool(json['is_coming_soon'] ?? json['isComingSoon']),
       isMlm: _parseBool(json['is_mlm'] ?? json['isMlm']),
+      discountPercentage: _parseDouble(json['discountPercentage'] ?? json['discount_percentage']),
     );
   }
 
@@ -276,6 +280,7 @@ class Product {
     String? weightUnit,
     bool? isComingSoon,
     bool? isMlm,
+    double? discountPercentage,
   }) {
     return Product(
       id: id ?? this.id,
@@ -293,6 +298,7 @@ class Product {
       weightUnit: weightUnit ?? this.weightUnit,
       isComingSoon: isComingSoon ?? this.isComingSoon,
       isMlm: isMlm ?? this.isMlm,
+      discountPercentage: discountPercentage ?? this.discountPercentage,
     );
   }
 
@@ -312,6 +318,7 @@ class Product {
       'weightUnit': weightUnit,
       'is_coming_soon': isComingSoon,
       'is_mlm': isMlm,
+      'discountPercentage': discountPercentage,
       'images': images.map((image) => image.toJson()).toList(),
     };
   }

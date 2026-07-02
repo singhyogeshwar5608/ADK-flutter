@@ -14,6 +14,7 @@ import '../services/cloudinary_service.dart';
 import '../state/profile_state.dart';
 import '../theme/app_theme.dart';
 import '../utils/referral_signup_params.dart';
+import '../utils/error_message_helper.dart';
 import 'home_screen.dart';
 import 'login_screen.dart';
 import 'privacy_policy_screen.dart';
@@ -117,6 +118,7 @@ class _SignupScreenState extends State<SignupScreen> {
 
   static const String _referralRequiredMsg =
       'Sign up is only allowed through your sponsor invite link (it includes ?ref=). Open that link and try again.';
+
 
   Future<void> _submit() async {
     final form = _formKey.currentState;
@@ -231,10 +233,7 @@ class _SignupScreenState extends State<SignupScreen> {
         friendly = error.message ??
             'Request timed out. Check your connection and try again.';
       } else {
-        final msg = error.toString();
-        friendly = msg.contains('referral') || msg.contains('Referral')
-            ? 'Invalid or expired sponsor / referral ID. Confirm the code from your sponsor.'
-            : 'Unable to create account. Check your details and try again.';
+        friendly = parseApiError(error);
       }
       setState(() => _submitError = friendly);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(friendly)));

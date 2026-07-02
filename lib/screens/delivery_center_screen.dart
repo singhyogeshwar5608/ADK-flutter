@@ -148,7 +148,7 @@ class _DeliveryCenterScreenState extends State<DeliveryCenterScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Could not launch phone dialer'),
-            backgroundColor: Colors.red,
+            backgroundColor: AppColors.primary,
           ),
         );
       }

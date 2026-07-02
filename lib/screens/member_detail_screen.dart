@@ -11,6 +11,8 @@ class MemberDetailArguments {
     required this.status,
     required this.totalBv,
     required this.teamSize,
+    required this.activeTeam,
+    required this.inactiveTeam,
     required this.weakLeg,
     required this.location,
     required this.contactEmail,
@@ -30,6 +32,8 @@ class MemberDetailArguments {
   final String status;
   final int totalBv;
   final int teamSize;
+  final int activeTeam;
+  final int inactiveTeam;
   final String weakLeg;
   final String location;
   final String contactEmail;
@@ -185,7 +189,15 @@ class _ProfileHero extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 12),
-              _HeroStat(label: 'Team Size', value: member.teamSize.toString()),
+              Row(
+                children: [
+                  Expanded(child: _HeroStat(label: 'Team Size', value: member.teamSize.toString())),
+                  const SizedBox(width: 8),
+                  Expanded(child: _HeroStat(label: 'Active', value: member.activeTeam.toString())),
+                  const SizedBox(width: 8),
+                  Expanded(child: _HeroStat(label: 'Inactive', value: member.inactiveTeam.toString())),
+                ],
+              ),
             ],
           ),
         ),

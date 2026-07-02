@@ -1,4 +1,4 @@
-package com.example.netshop_flutter
+package com.netshop.partner
 
 import io.flutter.embedding.android.FlutterActivity
 

@@ -12,11 +12,13 @@ class ProfileData {
     required this.city,
     required this.state,
     required this.partnerId,
+    required this.dbId,
     required this.membershipTier,
     required this.photoUrl,
     required this.followers,
     required this.following,
     required this.level,
+    required this.status,
     required this.totalIncome,
     required this.incomeGoal,
     required this.monthlyGrowthPercent,
@@ -25,6 +27,7 @@ class ProfileData {
     this.leftLegBv,
     this.rightLegBv,
     this.totalMatchedBv,
+    this.totalBv,
     this.directIncome,
     this.matchingIncome,
     this.weeklyIncome,
@@ -50,11 +53,13 @@ class ProfileData {
   final String city;
   final String state;
   final String partnerId;
+  final String dbId;
   final String membershipTier;
   final String photoUrl;
   final int followers;
   final int following;
   final String level;
+  final String status;
   final double totalIncome;
   final double incomeGoal;
   final double monthlyGrowthPercent;
@@ -64,6 +69,7 @@ class ProfileData {
   final double? leftLegBv;
   final double? rightLegBv;
   final double? totalMatchedBv;
+  final double? totalBv;
   final double? directIncome;
   final double? matchingIncome;
   final double? weeklyIncome;
@@ -112,11 +118,13 @@ class ProfileData {
     String? city,
     String? state,
     String? partnerId,
+    String? dbId,
     String? membershipTier,
     String? photoUrl,
     int? followers,
     int? following,
     String? level,
+    String? status,
     double? totalIncome,
     double? incomeGoal,
     double? monthlyGrowthPercent,
@@ -125,6 +133,7 @@ class ProfileData {
     double? leftLegBv,
     double? rightLegBv,
     double? totalMatchedBv,
+    double? totalBv,
     double? directIncome,
     double? matchingIncome,
     double? weeklyIncome,
@@ -150,11 +159,13 @@ class ProfileData {
       city: city ?? this.city,
       state: state ?? this.state,
       partnerId: partnerId ?? this.partnerId,
+      dbId: dbId ?? this.dbId,
       membershipTier: membershipTier ?? this.membershipTier,
       photoUrl: photoUrl ?? this.photoUrl,
       followers: followers ?? this.followers,
       following: following ?? this.following,
       level: level ?? this.level,
+      status: status ?? this.status,
       totalIncome: totalIncome ?? this.totalIncome,
       incomeGoal: incomeGoal ?? this.incomeGoal,
       monthlyGrowthPercent: monthlyGrowthPercent ?? this.monthlyGrowthPercent,
@@ -164,6 +175,7 @@ class ProfileData {
       leftLegBv: leftLegBv ?? this.leftLegBv,
       rightLegBv: rightLegBv ?? this.rightLegBv,
       totalMatchedBv: totalMatchedBv ?? this.totalMatchedBv,
+      totalBv: totalBv ?? this.totalBv,
       directIncome: directIncome ?? this.directIncome,
       matchingIncome: matchingIncome ?? this.matchingIncome,
       weeklyIncome: weeklyIncome ?? this.weeklyIncome,
@@ -241,12 +253,14 @@ class ProfileState extends ChangeNotifier {
     String? city,
     String? state,
     String? partnerId,
+    String? dbId,
     String? membershipTier,
     String? photoUrl,
     String? photoPublicId,
     int? followers,
     int? following,
     String? level,
+    String? status,
     double? totalIncome,
     double? incomeGoal,
     double? monthlyGrowthPercent,
@@ -254,6 +268,7 @@ class ProfileState extends ChangeNotifier {
     double? leftLegBv,
     double? rightLegBv,
     double? totalMatchedBv,
+    double? totalBv,
     double? directIncome,
     double? matchingIncome,
     double? weeklyIncome,
@@ -279,6 +294,7 @@ class ProfileState extends ChangeNotifier {
       city: city,
       state: state,
       partnerId: partnerId,
+      dbId: dbId,
       membershipTier: membershipTier,
       photoUrl: photoUrl,
       photoPublicId: photoPublicId,
@@ -286,6 +302,7 @@ class ProfileState extends ChangeNotifier {
       followers: followers,
       following: following,
       level: level,
+      status: status,
       totalIncome: totalIncome,
       incomeGoal: incomeGoal,
       monthlyGrowthPercent: monthlyGrowthPercent,
@@ -293,6 +310,7 @@ class ProfileState extends ChangeNotifier {
       leftLegBv: leftLegBv,
       rightLegBv: rightLegBv,
       totalMatchedBv: totalMatchedBv,
+      totalBv: totalBv,
       directIncome: directIncome,
       matchingIncome: matchingIncome,
       weeklyIncome: weeklyIncome,
@@ -431,6 +449,7 @@ class ProfileState extends ChangeNotifier {
     }
 
     final role = str(member['role']) ?? 'Member';
+    final memberType = str(member['type']) ?? 'USER';
     final placement = str(member['leg'])?.toUpperCase();
     final totalEarned = wallet is Map<String, dynamic>
         ? (toDouble((wallet as Map)['totalEarned'] ??
@@ -449,8 +468,10 @@ class ProfileState extends ChangeNotifier {
       city: str(member['city']) ?? '',
       state: str(member['state']) ?? '',
       partnerId: str(member['memberId'] ?? member['member_id']) ?? '',
-      membershipTier: role,
+      dbId: member['serial_no']?.toString() ?? member['id']?.toString() ?? '',
+      membershipTier: memberType,
       level: role,
+      status: str(member['status']) ?? 'ACTIVE',
       photoUrl: photoUrl,
       qrCodeUrl: qrCodeUrl,
       photoPublicId:
@@ -471,6 +492,7 @@ class ProfileState extends ChangeNotifier {
           : null,
       leftLegBv: leftBv,
       rightLegBv: rightBv,
+      totalBv: toDouble(member['bv_total'] ?? member['totalBv']),
       totalMatchedBv: totalMatchedBv,
       directIncome: incD('direct'),
       matchingIncome: incD('matching'),
@@ -527,11 +549,13 @@ const ProfileData _guestProfile = ProfileData(
   city: '',
   state: '',
   partnerId: '',
+  dbId: '',
   membershipTier: 'Guest',
   photoUrl: '',
   followers: 0,
   following: 0,
   level: '',
+  status: 'ACTIVE',
   totalIncome: 0,
   incomeGoal: 0,
   monthlyGrowthPercent: 0,

@@ -97,6 +97,32 @@ class DeepLinkService {
         return;
       }
 
+      // Handle product flow: adkpartner://product/PRODUCT_ID
+      if (uri.host == 'product') {
+        debugPrint('Product flow detected');
+        final productId = uri.pathSegments.isNotEmpty ? uri.pathSegments.first.trim() : '';
+        debugPrint('Product ID: $productId');
+
+        if (productId.isEmpty) {
+          debugPrint('No product ID provided, skipping product flow');
+          return;
+        }
+
+        final nav = _navigatorKey.currentState;
+        if (nav == null) {
+          debugPrint('Navigator is null, cannot navigate');
+          return;
+        }
+
+        debugPrint('Navigating to product loader for ID: $productId');
+        nav.pushNamedAndRemoveUntil(
+          '/',
+          (route) => false,
+        );
+        nav.pushNamed('/product/$productId');
+        return;
+      }
+
       // Handle wishlist flow: adkpartner://open?type=wishlist&token=ABC123
       if (uri.host == 'open') {
         debugPrint('Open flow detected');

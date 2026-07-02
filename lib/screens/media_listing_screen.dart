@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:http/http.dart' as http;
 
 // Conditional import for web to handle IFrame registration
 import '../utils/web_platform_stub.dart'
@@ -559,130 +560,6 @@ bool isFacebookUrl(String url) {
   return lower.contains('facebook.com') || lower.contains('fb.watch');
 }
 
-String? getFacebookThumbnail(String url) {
-  // Production Note: Facebook thumbnails are restricted without Graph API.
-  // We return null to trigger the high-quality fallback UI.
-  return null;
-}
-
-class _FacebookVideoPreview extends StatefulWidget {
-  const _FacebookVideoPreview({required this.url});
-  final String url;
-
-  @override
-  State<_FacebookVideoPreview> createState() => _FacebookVideoPreviewState();
-}
-
-class _FacebookVideoPreviewState extends State<_FacebookVideoPreview>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _pulseController;
-  late Animation<double> _pulseAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _pulseController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1500),
-    )..repeat(reverse: true);
-
-    _pulseAnimation = Tween<double>(begin: 1.0, end: 1.2).animate(
-      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
-    );
-  }
-
-  @override
-  void dispose() {
-    _pulseController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _handleTap() async {
-    final uri = Uri.tryParse(widget.url);
-    if (uri == null) return;
-    try {
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      }
-    } catch (e) {
-      debugPrint('Error launching FB: $e');
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final thumb = getFacebookThumbnail(widget.url);
-
-    return InkWell(
-      onTap: _handleTap,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          // Background / Thumbnail
-          if (thumb != null)
-            Image.network(thumb, fit: BoxFit.cover)
-          else
-            Container(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Color(0xFF1877F2), Color(0xFF0751AF)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-              ),
-              child: Center(
-                child: Icon(
-                  Icons.facebook,
-                  size: 64,
-                  color: Colors.white.withValues(alpha: 0.2),
-                ),
-              ),
-            ),
-
-          // Glassmorphism Overlay
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.black.withValues(alpha: 0.3),
-            ),
-            child: ClipRRect(
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 2, sigmaY: 2),
-                child: Container(color: Colors.transparent),
-              ),
-            ),
-          ),
-
-          // Animated Play Button
-          Center(
-            child: ScaleTransition(
-              scale: _pulseAnimation,
-              child: Container(
-                width: 64,
-                height: 64,
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.9),
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.2),
-                      blurRadius: 15,
-                      spreadRadius: 2,
-                    ),
-                  ],
-                ),
-                child: const Icon(
-                  Icons.play_arrow_rounded,
-                  size: 40,
-                  color: Color(0xFF1877F2),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 class _SocialLinkCard extends StatelessWidget {
   const _SocialLinkCard({required this.link, required this.onTap});
@@ -737,9 +614,7 @@ class _SocialLinkCard extends StatelessWidget {
                     aspectRatio: 16 / 9,
                     child: Container(
                       color: Colors.black,
-                      child: isFacebookUrl(link.link)
-                          ? _FacebookVideoPreview(url: link.link)
-                          : _SocialVideoEmbed(link: link.link),
+                      child: _SocialVideoEmbed(link: link.link),
                     ),
                   ),
                 ),
@@ -815,8 +690,9 @@ class _SocialVideoEmbed extends StatefulWidget {
 
 class _SocialVideoEmbedState extends State<_SocialVideoEmbed> {
   late String _viewId;
-  late String _embedUrl;
+  String? _embedUrl;
   WebViewController? _webController;
+  bool _isLoading = false;
 
   @override
   void initState() {
@@ -838,85 +714,116 @@ class _SocialVideoEmbedState extends State<_SocialVideoEmbed> {
     super.dispose();
   }
 
-  void _setupEmbed() {
-    _embedUrl = _getEmbedUrl(widget.link);
+  void _setupEmbed() async {
+    final originalUrl = widget.link.trim();
+    if (originalUrl.isEmpty) return;
 
-    if (kIsWeb) {
-      _viewId =
-          'social-video-${widget.link.hashCode}-${DateTime.now().millisecondsSinceEpoch}';
-      // Register the IFrame using the conditional utility
-      registerWebView(_viewId, _embedUrl);
-    } else {
-      late final PlatformWebViewControllerCreationParams params;
-      if (WebViewPlatform.instance is WebKitWebViewPlatform) {
-        params = WebKitWebViewControllerCreationParams(
-          allowsInlineMediaPlayback: true,
-        );
+    if (!mounted) return;
+    setState(() {
+      _isLoading = true;
+      _embedUrl = null;
+      _webController = null;
+    });
+
+    String resolvedUrl = originalUrl;
+
+    // Async resolution of short redirection links (like Facebook share and watch URLs)
+    if (originalUrl.contains('/share/') || originalUrl.contains('fb.watch')) {
+      try {
+        final client = http.Client();
+        final request = http.Request('GET', Uri.parse(originalUrl))
+          ..followRedirects = true;
+        final streamedResponse = await client.send(request).timeout(const Duration(seconds: 4));
+        final response = await http.Response.fromStream(streamedResponse);
+        
+        if (response.request?.url != null) {
+          final redirectedUrl = response.request!.url.toString();
+          // Verify that we got a valid url and it's not a generic fallback page
+          if (redirectedUrl.isNotEmpty && !redirectedUrl.contains('login.php')) {
+            resolvedUrl = redirectedUrl;
+          }
+        }
+      } catch (e) {
+        debugPrint('Error resolving redirect: $e');
+      }
+    }
+
+    final embedUrl = _getEmbedUrl(resolvedUrl);
+
+    if (mounted) {
+      _viewId = 'social-video-${widget.link.hashCode}-${DateTime.now().millisecondsSinceEpoch}';
+      
+      if (kIsWeb) {
+        // Register the IFrame using the conditional utility
+        registerWebView(_viewId, embedUrl);
       } else {
-        params = const PlatformWebViewControllerCreationParams();
+        _initWebViewController(embedUrl, resolvedUrl);
       }
 
-      final controller = WebViewController.fromPlatformCreationParams(params)
-        ..setJavaScriptMode(JavaScriptMode.unrestricted)
-        ..setUserAgent(
-            "Mozilla/5.0 (Linux; Android 10; SM-G973F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/88.0.4324.181 Mobile Safari/537.36")
-        ..setNavigationDelegate(
-          NavigationDelegate(
-            onPageFinished: (url) {
-              // Inject JS to attempt autoplay for Facebook and Instagram
-              _webController?.runJavaScript('''
-                (function() {
-                  function tryPlay() {
-                    // Try playing native video elements
-                    var videos = document.getElementsByTagName('video');
-                    for (var i = 0; i < videos.length; i++) {
-                      videos[i].muted = true;
-                      videos[i].setAttribute('muted', 'true');
-                      videos[i].play().catch(function(e) { console.log('Autoplay blocked:', e); });
-                    }
-                    
-                    // Specific for FB embeds - they often use a specific play button class
-                    // var fbPlayButtons = document.querySelectorAll('button[aria-label="Play"], button[title="Play"], ._4-u2 ._4-u3 button, ._s99');
-                    // for (var j = 0; j < fbPlayButtons.length; j++) {
-                    //   fbPlayButtons[j].click();
-                    // }
+      setState(() {
+        _embedUrl = embedUrl;
+        _isLoading = false;
+      });
+    }
+  }
 
-                    // Instagram specific
-                    var igPlayButtons = document.querySelectorAll('article div[role="button"]');
-                    for (var k = 0; k < igPlayButtons.length; k++) {
-                      if (igPlayButtons[k].innerText.toLowerCase().includes('play')) {
-                         igPlayButtons[k].click();
-                      }
-                    }
+  void _initWebViewController(String embedUrl, String cleanUrl) {
+    late final PlatformWebViewControllerCreationParams params;
+    if (WebViewPlatform.instance is WebKitWebViewPlatform) {
+      params = WebKitWebViewControllerCreationParams(
+        allowsInlineMediaPlayback: true,
+      );
+    } else {
+      params = const PlatformWebViewControllerCreationParams();
+    }
+
+    final controller = WebViewController.fromPlatformCreationParams(params)
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setUserAgent(
+          "Mozilla/5.0 (Linux; Android 10; SM-G973F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/88.0.4324.181 Mobile Safari/537.36")
+      ..setNavigationDelegate(
+        NavigationDelegate(
+          onPageFinished: (url) {
+            // Inject JS to attempt autoplay for Facebook and Instagram
+            _webController?.runJavaScript('''
+              (function() {
+                function tryPlay() {
+                  // Try playing native video elements
+                  var videos = document.getElementsByTagName('video');
+                  for (var i = 0; i < videos.length; i++) {
+                    videos[i].muted = true;
+                    videos[i].setAttribute('muted', 'true');
+                    videos[i].play().catch(function(e) { console.log('Autoplay blocked:', e); });
                   }
                   
-                  // Run multiple times as social embeds load in stages
-                  setTimeout(tryPlay, 1000);
-                  setTimeout(tryPlay, 2500);
-                  setTimeout(tryPlay, 5000);
-                })();
-              ''');
-            },
-            onWebResourceError: (error) =>
-                debugPrint('Web resource error: ${error.description}'),
-          ),
-        );
+                  // Instagram specific
+                  var igPlayButtons = document.querySelectorAll('article div[role="button"]');
+                  for (var k = 0; k < igPlayButtons.length; k++) {
+                    if (igPlayButtons[k].innerText.toLowerCase().includes('play')) {
+                       igPlayButtons[k].click();
+                    }
+                  }
+                }
+                
+                // Run multiple times as social embeds load in stages
+                setTimeout(tryPlay, 1000);
+                setTimeout(tryPlay, 2500);
+                setTimeout(tryPlay, 5000);
+              })();
+            ''');
+          },
+          onWebResourceError: (error) =>
+              debugPrint('Web resource error: ${error.description}'),
+        ),
+      );
 
-      if (!kIsWeb &&
-          (widget.link.contains('facebook.com') ||
-              widget.link.contains('fb.watch'))) {
-        final cleanUrl = _getCleanFacebookUrl(widget.link);
-        final html = '''
+    if (cleanUrl.contains('facebook.com') || cleanUrl.contains('fb.watch')) {
+      final html = '''
 <!DOCTYPE html>
 <html>
-
 <head>
-
-<meta name="viewport"
-content="width=device-width, initial-scale=1.0">
-
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
-
 html, body {
   margin: 0;
   padding: 0;
@@ -925,28 +832,20 @@ html, body {
   width: 100%;
   height: 100%;
 }
-
 #fb-root {
   display: none;
 }
-
 .fb-video {
   width: 100%;
   height: 100%;
 }
-
 </style>
-
 <script async defer crossorigin="anonymous"
 src="https://connect.facebook.net/en_US/sdk.js#xfbml=1&version=v19.0">
 </script>
-
 </head>
-
 <body>
-
 <div id="fb-root"></div>
-
 <div class="fb-video"
      data-href="$cleanUrl"
      data-width="500"
@@ -954,23 +853,21 @@ src="https://connect.facebook.net/en_US/sdk.js#xfbml=1&version=v19.0">
      data-autoplay="true"
      data-allowfullscreen="true">
 </div>
-
 </body>
 </html>
 ''';
-        controller.loadHtmlString(html, baseUrl: 'https://www.facebook.com');
-      } else {
-        controller.loadRequest(Uri.parse(_embedUrl));
-      }
-
-      // Enable autoplay for social embeds
-      final platform = controller.platform;
-      if (platform is AndroidWebViewController) {
-        platform.setMediaPlaybackRequiresUserGesture(false);
-      }
-
-      _webController = controller;
+      controller.loadHtmlString(html, baseUrl: 'https://www.facebook.com');
+    } else {
+      controller.loadRequest(Uri.parse(embedUrl));
     }
+
+    // Enable autoplay for social embeds
+    final platform = controller.platform;
+    if (platform is AndroidWebViewController) {
+      platform.setMediaPlaybackRequiresUserGesture(false);
+    }
+
+    _webController = controller;
   }
 
   String _getCleanFacebookUrl(String url) {
@@ -1041,41 +938,23 @@ src="https://connect.facebook.net/en_US/sdk.js#xfbml=1&version=v19.0">
       // FACEBOOK
       // =========================
       else if (url.contains('facebook.com') || url.contains('fb.watch')) {
-        // =========================
-        // BLOCK UNSUPPORTED SHARE URLS
-        // =========================
-        if (url.contains('/share/r/') || url.contains('/share/v/')) {
-          debugPrint(
-            'Unsupported Facebook share URL: $url',
-          );
-
-          return '''
-data:text/html,
-<html>
-<body style="
-background:black;
-display:flex;
-justify-content:center;
-align-items:center;
-height:100vh;
-color:white;
-font-family:sans-serif;
-text-align:center;
-padding:20px;">
-
-<div>
-Facebook share links are not embeddable.
-<br><br>
-Please use actual Facebook video URL.
-</div>
-
-</body>
-</html>
-''';
-        }
-
         String cleanUrl =
             url.replaceFirst('m.facebook.com', 'www.facebook.com').trim();
+
+        // Resolve share links to embeddable formats dynamically
+        if (cleanUrl.contains('/share/r/')) {
+          final parts = cleanUrl.split('/share/r/');
+          if (parts.length > 1) {
+            final id = parts[1].split('?').first.split('/').first;
+            cleanUrl = 'https://www.facebook.com/reel/$id';
+          }
+        } else if (cleanUrl.contains('/share/v/')) {
+          final parts = cleanUrl.split('/share/v/');
+          if (parts.length > 1) {
+            final id = parts[1].split('?').first.split('/').first;
+            cleanUrl = 'https://www.facebook.com/video.php?v=$id';
+          }
+        }
 
         String? videoId;
 
@@ -1189,6 +1068,15 @@ Please use actual Facebook video URL.
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading || _embedUrl == null) {
+      return Container(
+        color: Colors.black87,
+        child: const Center(
+          child: CircularProgressIndicator(color: Colors.white70),
+        ),
+      );
+    }
+
     if (kIsWeb) {
       return HtmlElementView(viewType: _viewId);
     }
@@ -1250,9 +1138,7 @@ class _MediaCardState extends State<_MediaCard> {
                       color: Colors.black,
                       child: item.isVideo
                           ? (item.isExternalVideo
-                              ? (isFacebookUrl(item.fileUrl)
-                                  ? _FacebookVideoPreview(url: item.fileUrl)
-                                  : _SocialVideoEmbed(link: item.fileUrl))
+                              ? _SocialVideoEmbed(link: item.fileUrl)
                               : _InlineVideoPlayer(
                                   url: item.fileUrl,
                                   thumbnail: item.thumbOrFile))

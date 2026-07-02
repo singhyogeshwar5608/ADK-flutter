@@ -6,6 +6,7 @@ import '../routes/app_routes.dart';
 import '../services/address_storage_service.dart';
 import '../services/api_client.dart';
 import '../state/profile_state.dart';
+import '../utils/error_message_helper.dart';
 import 'home_screen.dart';
 import 'profile_screen.dart';
 import 'signup_screen.dart';
@@ -134,12 +135,12 @@ class _LoginScreenState extends State<LoginScreen> {
       debugPrint('Login failed: $error');
       debugPrintStack(stackTrace: stackTrace);
       if (!mounted) return;
+      final msg = parseApiError(error);
       setState(() {
-        _submitError =
-            'Unable to sign in. Please check your credentials and try again.';
+        _submitError = msg;
       });
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_submitError!)),
+        SnackBar(content: Text(msg)),
       );
     } finally {
       if (mounted) {

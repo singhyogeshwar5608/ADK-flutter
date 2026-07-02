@@ -15,6 +15,7 @@ import '../theme/app_theme.dart';
 import 'addresses_screen.dart';
 import '../config/api_config.dart';
 import '../utils/auth_helper.dart';
+import '../utils/error_message_helper.dart';
 import '../services/api_client.dart';
 import 'customer_details_screen.dart';
 
@@ -227,12 +228,16 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         setState(() => _isProcessing = false);
+        if (mounted) {
+          ProfileProvider.of(context, listen: false).refresh();
+        }
       }
     });
     // Silence UI popups per requirement; log for debugging instead.
     debugPrint('Payment Successful! ID: $paymentId Order: $orderId');
     
     // Send WhatsApp notification
+    final profile = ProfileProvider.of(context, listen: false).data;
     _sendOrderWhatsApp(
       paymentId: paymentId,
       orderId: orderId,
@@ -250,6 +255,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           : (ModalRoute.of(context)?.settings.arguments is Map<String, dynamic>
               ? (ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>)['directPurchase']
               : null),
+      memberId: profile.partnerId.isNotEmpty ? profile.partnerId : null,
+      serialNo: profile.dbId.isNotEmpty ? profile.dbId : null,
+      profilePhone: profile.phone,
+      profileType: profile.membershipTier,
     );
     
     // TODO: Verify payment on backend and create order
@@ -258,6 +267,15 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   void _handlePaymentError(String error) {
     setState(() => _isProcessing = false);
     debugPrint('Payment Failed: $error');
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(parseApiError(error)),
+          backgroundColor: AppColors.primary,
+          duration: const Duration(seconds: 5),
+        ),
+      );
+    }
   }
 
   Future<void> _initiatePayment(double amount) async {
@@ -320,6 +338,15 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     } catch (e) {
       setState(() => _isProcessing = false);
       debugPrint('Error: ${e.toString()}');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(parseApiError(e)),
+            backgroundColor: AppColors.primary,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
     }
   }
 
@@ -413,18 +440,42 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     String gstType = 'GST';
     double gstPercent = 0;
 
+    final countryNorm = country.toLowerCase().trim();
+    final stateNorm = state.toLowerCase().trim();
+
+    if (countryNorm == 'india' || countryNorm == 'in') {
+      if (stateNorm == 'haryana' || stateNorm == 'hr') {
+        gstType = 'SGST';
+      } else {
+        gstType = 'CGST';
+      }
+    } else {
+      gstType = 'IGST';
+    }
+
     if (directPurchase != null) {
       final data = directPurchase.product.calculateDynamicPrice(country, state);
       final basePrice = data['basePrice'] as double;
       final gstAmount = data['gstAmount'] as double;
       unitPriceValue = data['finalPrice'] as double;
-      gstType = data['gstType'] as String;
       gstPercent = data['gstPercent'] as double;
       
       subtotalValue = basePrice * directPurchase.quantity;
       taxValue = gstAmount * directPurchase.quantity;
       totalValue = subtotalValue + taxValue;
     } else {
+      double totalGstAmount = 0;
+      double totalBasePrice = 0;
+      final selectedItems = cart.items.where((i) => i.isSelected);
+      for (final item in selectedItems) {
+        final data = item.product.calculateDynamicPrice(country, state);
+        totalGstAmount += (data['gstAmount'] as double) * item.quantity;
+        totalBasePrice += (data['basePrice'] as double) * item.quantity;
+      }
+      if (totalBasePrice > 0) {
+        gstPercent = (totalGstAmount / totalBasePrice) * 100;
+      }
+
       subtotalValue = cart.selectedSubtotal(country, state);
       taxValue = cart.selectedTax(country, state);
       totalValue = cart.selectedTotal(country, state);
@@ -465,6 +516,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                     gstType: gstType,
                     gstPercent: gstPercent,
                     unitPrice: unitPriceValue,
+                    shippingCountry: country,
+                    shippingState: state,
                     onOpenAddressBook: _openAddressBook,
                     savedAddresses: _savedAddresses,
                     onSelectSavedAddress: _selectSavedCheckout,
@@ -585,6 +638,8 @@ class _CheckoutBody extends StatelessWidget {
     required this.gstType,
     required this.gstPercent,
     required this.unitPrice,
+    required this.shippingCountry,
+    required this.shippingState,
     required this.onOpenAddressBook,
     required this.savedAddresses,
     required this.onSelectSavedAddress,
@@ -602,6 +657,8 @@ class _CheckoutBody extends StatelessWidget {
   final String gstType;
   final double gstPercent;
   final double unitPrice;
+  final String shippingCountry;
+  final String shippingState;
   final VoidCallback onOpenAddressBook;
   final List<StoredAddress> savedAddresses;
   final ValueChanged<StoredAddress> onSelectSavedAddress;
@@ -633,6 +690,8 @@ class _CheckoutBody extends StatelessWidget {
             gstType: gstType,
             gstPercent: gstPercent,
             unitPrice: unitPrice,
+            shippingCountry: shippingCountry,
+            shippingState: shippingState,
           ),
         ],
       ),
@@ -900,6 +959,8 @@ class _OrderSummaryCard extends StatelessWidget {
     required this.gstType,
     required this.gstPercent,
     required this.unitPrice,
+    required this.shippingCountry,
+    required this.shippingState,
   });
 
   final CartState cart;
@@ -911,6 +972,8 @@ class _OrderSummaryCard extends StatelessWidget {
   final String gstType;
   final double gstPercent;
   final double unitPrice;
+  final String shippingCountry;
+  final String shippingState;
 
   @override
   Widget build(BuildContext context) {
@@ -926,9 +989,6 @@ class _OrderSummaryCard extends StatelessWidget {
         : cart.items.where((i) => i.isSelected).length;
     final itemLabel = '$quantity ${quantity == 1 ? 'Item' : 'Items'}';
     final isDirect = directPurchase != null;
-    final shippingDetails = context.findAncestorWidgetOfExactType<_CheckoutBody>()?.shippingDetails;
-    final country = shippingDetails?.country ?? 'India';
-    final state = shippingDetails?.state ?? 'Haryana';
 
     String format(double value) => '₹${value.toStringAsFixed(2)}';
 
@@ -1128,7 +1188,7 @@ class _OrderSummaryCard extends StatelessWidget {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'GST calculated based on shipping address: $state, $country',
+                      'GST calculated based on shipping address: $shippingState, $shippingCountry',
                       style: theme.textTheme.bodySmall?.copyWith(
                         fontSize: 10,
                         fontWeight: FontWeight.w700,
@@ -1320,8 +1380,9 @@ class _MockOrderButton extends StatelessWidget {
       // Prepare order data
       final Map<String, dynamic> orderData = {
         'total_amount': total,
-        'tax_amount': tax, // Added tax/GST amount
-        'base_subtotal': total - tax, // Added base subtotal
+        'tax_amount': tax,
+        'base_subtotal': total - tax,
+        'receipt': 'order_${DateTime.now().millisecondsSinceEpoch}_${DateTime.now().microsecondsSinceEpoch}',
         'items': directPurchase != null
             ? [
                 {
@@ -1382,7 +1443,7 @@ class _MockOrderButton extends StatelessWidget {
           return;
         }
         final s = shippingDetails!;
-        orderData['shipping_details'] = {
+        orderData['shipping_address'] = {
           'full_name': s.fullName,
           'email': s.email!.trim(),
           'phone': s.primaryPhone,
@@ -1429,19 +1490,38 @@ class _MockOrderButton extends StatelessWidget {
             'Mock Order: Order created successfully - ID: ${responseData['order']['id']}');
         debugPrint('Mock Order: BV awarded: ${responseData['bv_awarded']}');
 
-        // Send WhatsApp notification for Mock Order
-        _sendOrderWhatsApp(
-          paymentId: 'MOCK_PAYMENT',
-          orderId: responseData['order']['id'].toString(),
-          shiprocketOrderId: responseData['order']['shiprocketOrderId'] ?? responseData['order']['shiprocket_order_id'],
-          shipmentId: responseData['order']['shipmentId'] ?? responseData['order']['shipment_id'],
-          awbCode: responseData['order']['awbCode'] ?? responseData['order']['awb_code'],
-          courierName: responseData['order']['courierName'] ?? responseData['order']['courier_name'],
-          trackingUrl: responseData['order']['trackingUrl'] ?? responseData['order']['tracking_url'] ?? responseData['tracking_url'],
-          cart: cart,
-          shippingDetails: shippingDetails,
-          directPurchase: directPurchase,
-        );
+        // Open WhatsApp with order details using backend-generated wa.me link
+        final whatsAppLink = responseData['whatsapp_link'] as String?;
+        if (whatsAppLink != null && whatsAppLink.isNotEmpty) {
+          final uri = Uri.parse(whatsAppLink);
+          if (await canLaunchUrl(uri)) {
+            await launchUrl(uri, mode: LaunchMode.externalApplication);
+          }
+        } else {
+          // Fallback: send WhatsApp notification from Flutter
+          final profile = ProfileProvider.of(context, listen: false).data;
+          _sendOrderWhatsApp(
+            paymentId: 'MOCK_PAYMENT',
+            orderId: responseData['order']['id'].toString(),
+            shiprocketOrderId: responseData['order']['shiprocketOrderId'] ?? responseData['order']['shiprocket_order_id'],
+            shipmentId: responseData['order']['shipmentId'] ?? responseData['order']['shipment_id'],
+            awbCode: responseData['order']['awbCode'] ?? responseData['order']['awb_code'],
+            courierName: responseData['order']['courierName'] ?? responseData['order']['courier_name'],
+            trackingUrl: responseData['order']['trackingUrl'] ?? responseData['order']['tracking_url'] ?? responseData['tracking_url'],
+            cart: cart,
+            shippingDetails: shippingDetails,
+            directPurchase: directPurchase,
+            memberId: profile.partnerId.isNotEmpty ? profile.partnerId : null,
+            serialNo: profile.dbId.isNotEmpty ? profile.dbId : null,
+            profilePhone: profile.phone,
+            profileType: profile.membershipTier,
+          );
+        }
+
+        // Refresh profile immediately to update BV & wallet
+        if (context.mounted) {
+          ProfileProvider.of(context, listen: false).refresh();
+        }
 
         // Show success dialog with real data
         if (context.mounted) {
@@ -1497,18 +1577,56 @@ class _MockOrderButton extends StatelessWidget {
           );
         }
       } else {
-        throw Exception('API Error: ${response.statusCode} - ${response.body}');
+        final errorMsg = _parseOrderError(response);
+        throw Exception(errorMsg);
       }
     } catch (e) {
       debugPrint('Mock Order: Error creating order - $e');
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error creating mock order: $e'),
-            backgroundColor: Colors.red,
+            content: Text(parseApiError(e)),
+            backgroundColor: AppColors.primary,
           ),
         );
       }
+    }
+  }
+
+  String _parseOrderError(http.Response response) {
+    try {
+      final body = json.decode(response.body);
+      if (body is Map<String, dynamic>) {
+        final msg = body['message'] as String?;
+        if (msg != null && msg.isNotEmpty) return msg;
+        final errors = body['errors'];
+        if (errors is Map && errors.isNotEmpty) {
+          final first = errors.values.first;
+          if (first is List && first.isNotEmpty) return first.first.toString();
+          if (first is String) return first;
+        }
+        final error = body['error'] as String?;
+        if (error != null && error.isNotEmpty) return error;
+      }
+    } catch (_) {}
+
+    switch (response.statusCode) {
+      case 400:
+        return 'Invalid order data. Please check your items and try again.';
+      case 401:
+        return 'Please login to place an order.';
+      case 403:
+        return 'You are not allowed to place this order.';
+      case 404:
+        return 'Order service not available. Please try again later.';
+      case 409:
+        return 'This order has already been placed.';
+      case 422:
+        return 'Some order details are invalid. Please review and try again.';
+      case 429:
+        return 'Too many orders. Please wait a moment and try again.';
+      default:
+        return 'Unable to create order (Error ${response.statusCode}). Please try again.';
     }
   }
 
@@ -1567,6 +1685,10 @@ Future<void> _sendOrderWhatsApp({
   required CartState cart,
   required ShippingDetailsPayload? shippingDetails,
   required CheckoutArguments? directPurchase,
+  String? memberId,
+  String? serialNo,
+  String? profilePhone,
+  String? profileType,
 }) async {
   final country = shippingDetails?.country ?? 'India';
   final state = shippingDetails?.state ?? 'Haryana';
@@ -1631,8 +1753,12 @@ Future<void> _sendOrderWhatsApp({
     }
   }
 
+  final memberInfo = memberId != null
+      ? 'Member ID: $memberId\nSerial No: $serialNo\nType: ${profileType == 'LEADER' ? '👑 LEADER' : '👤 USER'}'
+      : 'simple user hai koi member nhi hai';
+
   final message = '''
-Hi Family farmer Store,
+Asli Desi Kisan Pvt. Ltd,
 
 Your Order Number *#$orderId* is under process.
 
@@ -1645,28 +1771,18 @@ $shiprocketInfo
 
 👤 *$customerInfo*
 
+👤 *$memberInfo*
+
 Please confirm if you wish to receive the same.
 ''';
 
-  final whatsappUrl = Uri.parse(
-      'https://wa.me/918707599904?text=${Uri.encodeComponent(message)}');
-
-  // Also send to current user if phone is available
-  final currentUserPhone = shippingDetails?.primaryPhone;
-  if (currentUserPhone != null && currentUserPhone.isNotEmpty) {
-    String cleanPhone = currentUserPhone.replaceAll(RegExp(r'[^0-9]'), '');
-    if (cleanPhone.length == 10) {
-      cleanPhone = '91$cleanPhone';
-    } else if (cleanPhone.length == 12 && cleanPhone.startsWith('91')) {
-      // already has 91
-    }
-    
-    final userMsgUrl = Uri.parse(
-        'https://wa.me/$cleanPhone?text=${Uri.encodeComponent(message)}');
-    if (await canLaunchUrl(userMsgUrl)) {
-      await launchUrl(userMsgUrl, mode: LaunchMode.externalApplication);
-    }
+  final phone = '918307599904';
+  if (phone.length < 10) {
+    debugPrint('Invalid phone number for WhatsApp: $phone');
+    return;
   }
+  final whatsappUrl = Uri.parse(
+      'https://wa.me/$phone?text=${Uri.encodeComponent(message)}');
 
   if (await canLaunchUrl(whatsappUrl)) {
     await launchUrl(whatsappUrl, mode: LaunchMode.externalApplication);

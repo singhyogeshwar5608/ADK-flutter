@@ -255,6 +255,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
       _cityCtrl,
       _zipCtrl,
       _address1Ctrl,
+      _address2Ctrl,
       if (_guestBuyer) _emailCtrl,
     ];
     final allFilled =
@@ -337,19 +338,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
     return null;
   }
 
-  String? _guestEmailValidator(String? v) {
-    if (!_guestBuyer) return null;
-    if (v == null || v.trim().isEmpty) {
-      return 'Email is required for guest checkout';
-    }
-    final t = v.trim();
-    if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(t)) {
-      return 'Enter a valid email address';
-    }
-    return null;
-  }
-
-  static const double _fieldRadius = 12;
+  static const double _fieldRadius = 8;
 
   /// Base body size from theme, minus 3px for both input and hint (per spec).
   double _inputFontSize(ThemeData theme) {
@@ -371,7 +360,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
         ? const Color(0xFF94A3B8)
         : const Color(0xFF64748B);
     final idleColor =
-        isDark ? const Color(0xFF273548) : const Color(0xFFE2E8F0);
+        isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1);
 
     OutlineInputBorder outline(Color color, [double width = 1]) {
       return OutlineInputBorder(
@@ -389,7 +378,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
         color: muted.withValues(alpha: 0.88),
       ),
       filled: true,
-      fillColor: Colors.transparent,
+      fillColor: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
       border: outline(idleColor),
       enabledBorder: outline(idleColor),
       focusedBorder: outline(primary, 1.35),
@@ -402,7 +391,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
       ),
       contentPadding: EdgeInsets.symmetric(
         horizontal: 14,
-        vertical: (maxLines != null && maxLines > 1) ? 11 : 9,
+        vertical: (maxLines != null && maxLines > 1) ? 12 : 10,
       ),
     );
   }
@@ -432,7 +421,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(_fieldRadius),
-        child: ColoredBox(color: Colors.white, child: child),
+        child: child,
       ),
     );
   }
@@ -446,35 +435,66 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
     List<TextInputFormatter>? inputFormatters,
     TextCapitalization textCapitalization = TextCapitalization.none,
     int? maxLines,
+    bool required = true,
   }) {
     final theme = Theme.of(context);
     final inputSize = _inputFontSize(theme);
     final isDark = theme.brightness == Brightness.dark;
 
-    return _fieldShell(
-      context,
-      child: TextFormField(
-        controller: controller,
-        keyboardType: keyboardType,
-        inputFormatters: inputFormatters,
-        textCapitalization: textCapitalization,
-        maxLines: maxLines ?? 1,
-        style: TextStyle(
-          fontSize: inputSize,
-          fontWeight: FontWeight.w500,
-          height: 1.25,
-          color: theme.colorScheme.onSurface,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 4, bottom: 6),
+          child: RichText(
+            text: TextSpan(
+              text: placeholder,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.75),
+              ),
+              children: [
+                if (required)
+                  const TextSpan(
+                    text: ' *',
+                    style: TextStyle(
+                      color: Colors.red,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 17,
+                    ),
+                  ),
+              ],
+            ),
+          ),
         ),
-        cursorColor: theme.colorScheme.primary,
-        decoration: _decoration(
+        _fieldShell(
           context,
-          placeholder,
-          maxLines: maxLines,
-          inputFontSize: inputSize,
-          isDark: isDark,
+          child: TextFormField(
+            controller: controller,
+            keyboardType: keyboardType,
+            inputFormatters: inputFormatters,
+            textCapitalization: textCapitalization,
+            maxLines: maxLines ?? 1,
+            style: TextStyle(
+              fontSize: inputSize,
+              fontWeight: FontWeight.w500,
+              height: 1.25,
+              color: theme.colorScheme.onSurface,
+            ),
+            cursorColor: theme.colorScheme.primary,
+            decoration: _decoration(
+              context,
+              '',
+              maxLines: maxLines,
+              inputFontSize: inputSize,
+              isDark: isDark,
+            ),
+            validator: validator,
+          ),
         ),
-        validator: validator,
-      ),
+      ],
     );
   }
 
@@ -492,7 +512,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
         final theme = Theme.of(context);
         final isDark = theme.brightness == Brightness.dark;
         final background =
-            isDark ? const Color(0xFF070F1B) : const Color(0xFFF3F6FB);
+            isDark ? const Color(0xFF070F1B) : Colors.white;
 
         return Scaffold(
           backgroundColor: background,
@@ -505,12 +525,13 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
           body: SafeArea(
             child: Form(
               key: _formKey,
-              child: SingleChildScrollView(
+              child: Padding(
                 padding: EdgeInsets.fromLTRB(
-                    horizontalPadding, 14, horizontalPadding, 110),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
+                    horizontalPadding, 14, horizontalPadding, 14),
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
                     if (_savedAddresses.isNotEmpty) ...[
                       Container(
                         padding: const EdgeInsets.all(12),
@@ -586,59 +607,55 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                         return null;
                       },
                     ),
-                    if (_guestBuyer) ...[
-                      const SizedBox(height: 12),
-                      _shippingField(
+                    const SizedBox(height: 12),
+                    _shippingField(
                       context,
                       controller: _emailCtrl,
                       placeholder: 'Email (order updates)',
                       keyboardType: TextInputType.emailAddress,
                       textCapitalization: TextCapitalization.none,
-                      validator: _guestEmailValidator,
+                      required: false,
+                      validator: (v) {
+                        if (v == null || v.trim().isEmpty) {
+                          return null;
+                        }
+                        if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(v.trim())) {
+                          return 'Enter a valid email address';
+                        }
+                        return null;
+                      },
                     ),
-                  ],
-                  const SizedBox(height: 12),
-                  _shippingField(
-                    context,
-                    controller: _countryCtrl,
-                    placeholder: 'Country',
-                    textCapitalization: TextCapitalization.words,
-                    validator: (v) => _required(v, 'Country'),
-                  ),
-                  const SizedBox(height: 12),
-                  _shippingField(
-                    context,
-                    controller: _stateCtrl,
-                    placeholder: 'State / Province',
-                    textCapitalization: TextCapitalization.words,
-                    validator: (v) => _required(v, 'State / Province'),
-                  ),
                     const SizedBox(height: 12),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          flex: 11,
-                          child: _shippingField(
-                            context,
-                            controller: _cityCtrl,
-                            placeholder: 'City',
-                            textCapitalization: TextCapitalization.words,
-                            validator: (v) => _required(v, 'City'),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          flex: 9,
-                          child: _shippingField(
-                            context,
-                            controller: _zipCtrl,
-                            placeholder: 'ZIP / Postal code',
-                            keyboardType: TextInputType.text,
-                            validator: (v) => _required(v, 'ZIP / Postal code'),
-                          ),
-                        ),
-                      ],
+                    _shippingField(
+                      context,
+                      controller: _zipCtrl,
+                      placeholder: 'Pin Code',
+                      keyboardType: TextInputType.text,
+                      validator: (v) => _required(v, 'Pin Code'),
+                    ),
+                    const SizedBox(height: 12),
+                    _shippingField(
+                      context,
+                      controller: _countryCtrl,
+                      placeholder: 'Country',
+                      textCapitalization: TextCapitalization.words,
+                      validator: (v) => _required(v, 'Country'),
+                    ),
+                    const SizedBox(height: 12),
+                    _shippingField(
+                      context,
+                      controller: _stateCtrl,
+                      placeholder: 'State / Province',
+                      textCapitalization: TextCapitalization.words,
+                      validator: (v) => _required(v, 'State / Province'),
+                    ),
+                    const SizedBox(height: 12),
+                    _shippingField(
+                      context,
+                      controller: _cityCtrl,
+                      placeholder: 'City',
+                      textCapitalization: TextCapitalization.words,
+                      validator: (v) => _required(v, 'City'),
                     ),
                     const SizedBox(height: 12),
                     _shippingField(
@@ -651,9 +668,11 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                     _shippingField(
                       context,
                       controller: _address2Ctrl,
-                      placeholder: 'Address line 2 (optional)',
+                      placeholder: 'Address line 2',
+                      validator: (v) => _required(v, 'Address line 2'),
                     ),
                   ],
+                ),
                 ),
               ),
             ),

@@ -1,0 +1,22 @@
+# App Link Verification (CRITICAL)
+/.well-known/assetlinks.json    /.well-known/assetlinks.json   200
+
+# Referral / signup bridge — serves static HTML that tries to open the app via custom scheme / Android Intent
+/members/signup    /members/signup/index.html   200
+/members/signup/   /members/signup/index.html   200
+/signup    /signup/index.html   200
+/signup/   /signup/index.html   200
+
+# Wishlist deep links — serve bridge HTML (JS reads token from window.location.pathname)
+/members/wishlist/*  /members/wishlist/index.html   200
+/members/w/*         /members/wishlist/index.html   200
+/wishlist/*  /wishlist/index.html   200
+/w/*         /wishlist/index.html   200
+/wishlist    /wishlist/index.html   200
+
+# Product deep links — serve bridge HTML (JS reads product ID from window.location.pathname)
+/members/product/*  /members/product/index.html   200
+/product/*  /product/index.html   200
+
+# Flutter Web App — serve Flutter web app for all other routes (404 so app_links can intercept)
+/*    /index.html   200

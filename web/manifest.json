@@ -1,11 +1,11 @@
 {
-    "name": "netshop_flutter",
-    "short_name": "netshop_flutter",
+    "name": "ADK Partner",
+    "short_name": "ADK Partner",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "ADK MLM partner portal",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

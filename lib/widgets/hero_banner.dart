@@ -13,7 +13,7 @@ class HeroBanner extends StatefulWidget {
 }
 
 class _HeroBannerState extends State<HeroBanner> {
-  final PageController _pageController = PageController();
+  late final PageController _pageController;
 
   static const _autoPlayInterval = Duration(seconds: 5);
 
@@ -41,6 +41,7 @@ class _HeroBannerState extends State<HeroBanner> {
   @override
   void initState() {
     super.initState();
+    _pageController = PageController(viewportFraction: 0.85);
     _loadSlides();
   }
 
@@ -98,7 +99,7 @@ class _HeroBannerState extends State<HeroBanner> {
         final width = constraints.maxWidth;
         final isCompact = width < 380;
         final requiresMinHeight = width < 560;
-        final minHeight = isCompact ? 230.0 : 260.0;
+        final minHeight = isCompact ? 190.0 : 220.0;
 
         if (_loading) {
           return SizedBox(
@@ -133,14 +134,33 @@ class _HeroBannerState extends State<HeroBanner> {
           );
         }
 
-        Widget buildBanner(_BannerData data) {
-          return ClipRRect(
-            borderRadius: BorderRadius.circular(20),
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                SafeNetworkImage(src: data.imageUrl, fit: BoxFit.contain),
-              ],
+        Widget buildBanner(int index, _BannerData data) {
+          return AnimatedBuilder(
+            animation: _pageController,
+            builder: (context, child) {
+              double value = 1.0;
+              if (_pageController.position.haveDimensions) {
+                value = (_pageController.page! - index).abs();
+                value = (1 - (value * 0.08)).clamp(0.92, 1.0);
+              } else {
+                value = index == _currentPage ? 1.0 : 0.92;
+              }
+              return Transform.scale(
+                scale: value,
+                child: child,
+              );
+            },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 6.0),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    SafeNetworkImage(src: data.imageUrl, fit: BoxFit.fill),
+                  ],
+                ),
+              ),
             ),
           );
         }
@@ -151,7 +171,7 @@ class _HeroBannerState extends State<HeroBanner> {
               controller: _pageController,
               itemCount: _banners.length,
               onPageChanged: (index) => setState(() => _currentPage = index),
-              itemBuilder: (_, index) => buildBanner(_banners[index]),
+              itemBuilder: (_, index) => buildBanner(index, _banners[index]),
             ),
             Positioned(
               right: 12,
